@@ -25,13 +25,39 @@ public actor MetadataEmbedder {
     private let scriptPath: String
 
     public init() {
-        self.pythonPath = "/opt/homebrew/bin/python3"
-        // In SPM CLI builds, Resources/embed_metadata.py is placed next to the executable.
-        if let exePath = CommandLine.arguments.first.map({ URL(fileURLWithPath: $0).deletingLastPathComponent().path }) {
-            self.scriptPath = (exePath as NSString).appendingPathComponent("embed_metadata.py")
-        } else {
-            self.scriptPath = "embed_metadata.py"
+        self.pythonPath = Self.findPython()
+        self.scriptPath = Self.locateScript()
+    }
+
+    private static func findPython() -> String {
+        let candidates = ["python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "python3"
+    }
+
+    /// Walk up from the executable's directory to find embed_metadata.py.
+    /// Handles SPM development builds, release builds, and installed layouts.
+    private static func locateScript() -> String {
+        let exeDir = CommandLine.arguments.first
+            .map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
+            ?? FileManager.default.currentDirectoryPath
+
+        // SPM places Resources/ next to the executable in release builds.
+        // In development, it may be two levels up from .build/bin.
+        let searchPaths = [
+            URL(fileURLWithPath: exeDir).appendingPathComponent("embed_metadata.py"),
+            URL(fileURLWithPath: exeDir).appendingPathComponent("Resources/embed_metadata.py"),
+            URL(fileURLWithPath: exeDir).appendingPathComponent("../../Resources/embed_metadata.py"),
+            URL(fileURLWithPath: exeDir).appendingPathComponent("../../../Resources/embed_metadata.py"),
+            URL(fileURLWithPath: exeDir).appendingPathComponent("../../../../Resources/embed_metadata.py"),
+        ]
+
+        for url in searchPaths {
+            if FileManager.default.isReadableFile(atPath: url.path) {
+                return url.path
+            }
         }
+
+        return "embed_metadata.py"  // last resort: rely on PATH
     }
 
     /// Embed metadata into multiple FLAC files at once.
