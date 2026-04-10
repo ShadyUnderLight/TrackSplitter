@@ -1,0 +1,8 @@
+.build/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+*.swp
+*.swo
+*.pyc
+__pycache__/

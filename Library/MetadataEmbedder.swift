@@ -25,20 +25,13 @@ public actor MetadataEmbedder {
     private let scriptPath: String
 
     public init() {
-        self.pythonPath = Self.findPython()
-        // Resources are at TrackSplitter/Resources/. (print for debug)
-        print("[DEBUG] scriptPath: \(self.scriptPath), exists: \(FileManager.default.fileExists(atPath: self.scriptPath)))") Walk up from executable to find project root.
-        // In SPM release build, executable and embed_metadata.py are in the same directory.
+        self.pythonPath = "/opt/homebrew/bin/python3"
+        // In SPM CLI builds, Resources/embed_metadata.py is placed next to the executable.
         if let exePath = CommandLine.arguments.first.map({ URL(fileURLWithPath: $0).deletingLastPathComponent().path }) {
             self.scriptPath = (exePath as NSString).appendingPathComponent("embed_metadata.py")
         } else {
             self.scriptPath = "embed_metadata.py"
         }
-    }
-
-    private static func findPython() -> String {
-        let candidates = ["/opt/homebrew/bin/python3"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "python3"
     }
 
     /// Embed metadata into multiple FLAC files at once.
@@ -70,7 +63,6 @@ public actor MetadataEmbedder {
             throw EmbedError.encodingFailed
         }
 
-        // Write JSON to a temp file to avoid shell escaping issues
         let tempDir = FileManager.default.temporaryDirectory
         let tempFile = tempDir.appendingPathComponent("tracksplitter_payload_\(UUID().uuidString).json")
         do {
@@ -80,7 +72,6 @@ public actor MetadataEmbedder {
         }
 
         defer { try? FileManager.default.removeItem(at: tempFile) }
-
         try await runScript(jsonFile: tempFile)
     }
 
@@ -99,16 +90,17 @@ public actor MetadataEmbedder {
                 try process.run()
                 process.waitUntilExit()
 
+                let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                let stdout = String(data: outData, encoding: .utf8) ?? ""
+                let stderr = String(data: errData, encoding: .utf8) ?? ""
+
                 if process.terminationStatus == 0 {
-                    // Print script stdout for logging
-                    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let outStr = String(data: outData, encoding: .utf8), !outStr.isEmpty {
-                    }
                     cont.resume()
                 } else {
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let msg = String(data: errData, encoding: .utf8).map { String($0.prefix(500)) } ?? "exit \(process.terminationStatus)"
-                    cont.resume(throwing: EmbedError.scriptFailed(msg))
+                    cont.resume(throwing: EmbedError.scriptFailed(
+                        "RC=\(process.terminationStatus) STDERR=\(stderr.prefix(200)) STDOUT=\(stdout.prefix(100))"
+                    ))
                 }
             } catch {
                 cont.resume(throwing: error)
