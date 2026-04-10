@@ -1,0 +1,270 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001 /* AppDelegate.swift */; };
+		A002 /* TrackSplitterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002 /* TrackSplitterApp.swift */; };
+		A003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F003 /* ContentView.swift */; };
+		A004 /* DropZoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F004 /* DropZoneView.swift */; };
+		A005 /* ProgressLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F005 /* ProgressLogView.swift */; };
+		A006 /* CueParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F006 /* CueParser.swift */; };
+		A007 /* AlbumArtFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F007 /* AlbumArtFetcher.swift */; };
+		A008 /* ProcessSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F008 /* ProcessSupport.swift */; };
+		A009 /* SplitterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F009 /* SplitterEngine.swift */; };
+		A010 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F010 /* Models.swift */; };
+		A011 /* embed_metadata.py in Resources */ = {isa = PBXBuildFile; fileRef = F011 /* embed_metadata.py */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		P001 /* TrackSplitter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TrackSplitter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		F002 /* TrackSplitterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSplitterApp.swift; sourceTree = "<group>"; };
+		F003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F004 /* DropZoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropZoneView.swift; sourceTree = "<group>"; };
+		F005 /* ProgressLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressLogView.swift; sourceTree = "<group>"; };
+		F006 /* CueParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueParser.swift; sourceTree = "<group>"; };
+		F007 /* AlbumArtFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumArtFetcher.swift; sourceTree = "<group>"; };
+		F008 /* ProcessSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSupport.swift; sourceTree = "<group>"; };
+		F009 /* SplitterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitterEngine.swift; sourceTree = "<group>"; };
+		F010 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F011 /* embed_metadata.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = embed_metadata.py; sourceTree = "<group>"; };
+		F012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G001 = {
+			isa = PBXGroup;
+			children = (
+				G002 /* TrackSplitter */,
+				G003 /* Resources */,
+				G004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G002 /* TrackSplitter */ = {
+			isa = PBXGroup;
+			path = TrackSplitter;
+			sourceTree = "<group>";
+			children = (
+				F001 /* AppDelegate.swift */,
+				F002 /* TrackSplitterApp.swift */,
+				F003 /* ContentView.swift */,
+				F004 /* DropZoneView.swift */,
+				F005 /* ProgressLogView.swift */,
+				F006 /* CueParser.swift */,
+				F007 /* AlbumArtFetcher.swift */,
+				F008 /* ProcessSupport.swift */,
+				F009 /* SplitterEngine.swift */,
+				F010 /* Models.swift */,
+				F012 /* Info.plist */,
+			);
+		};
+		G003 /* Resources */ = {
+			isa = PBXGroup;
+			path = Resources;
+			sourceTree = "<group>";
+			children = (
+				F011 /* embed_metadata.py */,
+			);
+		};
+		G004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				P001 /* TrackSplitter.app */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T001 /* TrackSplitter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C002 /* Build configuration list for PBXNativeTarget "TrackSplitter" */;
+			buildPhases = (
+				B002 /* Sources */,
+				B001 /* Frameworks */,
+				B003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TrackSplitter;
+			productName = TrackSplitter;
+			productReference = P001 /* TrackSplitter.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		PRJ1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					T001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = C001 /* Build configuration list for PBXProject "TrackSplitter" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G001;
+			productRefGroup = G004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T001 /* TrackSplitter */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A011 /* embed_metadata.py in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A001 /* AppDelegate.swift in Sources */,
+				A002 /* TrackSplitterApp.swift in Sources */,
+				A003 /* ContentView.swift in Sources */,
+				A004 /* DropZoneView.swift in Sources */,
+				A005 /* ProgressLogView.swift in Sources */,
+				A006 /* CueParser.swift in Sources */,
+				A007 /* AlbumArtFetcher.swift in Sources */,
+				A008 /* ProcessSupport.swift in Sources */,
+				A009 /* SplitterEngine.swift in Sources */,
+				A010 /* Models.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trackSplitter.app;
+				PRODUCT_NAME = TrackSplitter;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		D002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trackSplitter.app;
+				PRODUCT_NAME = TrackSplitter;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		D003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TrackSplitter/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trackSplitter.app;
+				PRODUCT_NAME = TrackSplitter;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		D004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TrackSplitter/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trackSplitter.app;
+				PRODUCT_NAME = TrackSplitter;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C001 /* Build configuration list for PBXProject "TrackSplitter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D001 /* Debug */,
+				D002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C002 /* Build configuration list for PBXNativeTarget "TrackSplitter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D003 /* Debug */,
+				D004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = PRJ1 /* Project object */;
+}

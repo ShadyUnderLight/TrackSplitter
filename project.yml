@@ -1,0 +1,19 @@
+name: TrackSplitter
+options:
+  bundleIdPrefix: com.trackSplitter
+  deploymentTarget:
+    macOS: "13.0"
+targets:
+  TrackSplitter:
+    type: application
+    platform: macOS
+    sources: [TrackSplitter]
+    resources: [Resources]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.trackSplitter.app
+      INFOPLIST_FILE: TrackSplitter/Info.plist
+      PRODUCT_NAME: TrackSplitter
+      SWIFT_VERSION: "5.9"
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGN_STYLE: Manual
