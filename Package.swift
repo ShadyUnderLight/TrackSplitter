@@ -5,7 +5,8 @@ let package = Package(
     name: "TrackSplitter",
     platforms: [.macOS("13.0")],
     products: [
-        .executable(name: "tracksplitter", targets: ["TrackSplitterCLI"])
+        .executable(name: "tracksplitter", targets: ["TrackSplitterCLI"]),
+        .executable(name: "tracksplitter-gui", targets: ["TrackSplitterGUI"])
     ],
     dependencies: [],
     targets: [
@@ -19,7 +20,30 @@ let package = Package(
             name: "TrackSplitterLib",
             dependencies: [],
             path: "Library",
-            sources: ["CueParser.swift", "AlbumArtFetcher.swift", "FLACSplitter.swift", "MetadataEmbedder.swift", "TrackSplitterEngine.swift"]
+            sources: [
+                "CueParser.swift",
+                "AlbumArtFetcher.swift",
+                "FLACSplitter.swift",
+                "MetadataEmbedder.swift",
+                "TrackSplitterEngine.swift",
+                "WebGUI.swift",
+                "WebUIHTML.swift",
+            ]
+        ),
+        .executableTarget(
+            name: "TrackSplitterGUI",
+            dependencies: ["TrackSplitterLib"],
+            path: ".",
+            sources: [
+                "App/TrackSplitterApp.swift",
+                "App/AppState.swift",
+                "Views/ContentView.swift",
+                "Views/DropZoneView.swift",
+                "Views/TrackListView.swift",
+                "Views/ProcessingView.swift",
+                "Views/ResultView.swift",
+                "ViewModels/SplitterViewModel.swift",
+            ]
         )
     ]
 )

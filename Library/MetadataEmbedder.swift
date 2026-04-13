@@ -30,25 +30,25 @@ public actor MetadataEmbedder {
     }
 
     private static func findPython() -> String {
-        let candidates = ["python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]
+        let candidates = ["/opt/homebrew/bin/python3", "/opt/homebrew/bin/python3.14", "/usr/local/bin/python3", "python3"]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "python3"
     }
 
     /// Walk up from the executable's directory to find embed_metadata.py.
-    /// Handles SPM development builds, release builds, and installed layouts.
+/// Handles SPM development builds, release builds, and installed layouts.
     private static func locateScript() -> String {
-        let exeDir = CommandLine.arguments.first
-            .map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
-            ?? FileManager.default.currentDirectoryPath
+        let exeDir = (CommandLine.arguments.first.map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
+            ?? FileManager.default.currentDirectoryPath)
 
-        // SPM places Resources/ next to the executable in release builds.
-        // In development, it may be two levels up from .build/bin.
-        let searchPaths = [
-            URL(fileURLWithPath: exeDir).appendingPathComponent("embed_metadata.py"),
-            URL(fileURLWithPath: exeDir).appendingPathComponent("Resources/embed_metadata.py"),
-            URL(fileURLWithPath: exeDir).appendingPathComponent("../../Resources/embed_metadata.py"),
-            URL(fileURLWithPath: exeDir).appendingPathComponent("../../../Resources/embed_metadata.py"),
-            URL(fileURLWithPath: exeDir).appendingPathComponent("../../../../Resources/embed_metadata.py"),
+        // Build search paths using URL resolved against executable directory
+        let exeURL = URL(fileURLWithPath: exeDir)
+        let searchPaths: [URL] = [
+            exeURL.appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
         ]
 
         for url in searchPaths {

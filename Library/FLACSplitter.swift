@@ -33,7 +33,22 @@ public actor FLACSplitter {
     }
 
     private static func findBinary(_ name: String) -> String? {
-        ProcessInfo.processInfo.environment["PATH"]?
+        // Hardcode homebrew paths first, then fall back to PATH lookup.
+        // GUI apps started via Finder/NSOpenPanel don't inherit a full PATH.
+        let homebrewPaths = [
+            "/opt/homebrew/bin/\(name)",
+            "/opt/homebrew/bin/\(name)3",
+            "/usr/local/bin/\(name)",
+            "/usr/bin/\(name)"
+        ]
+        // Try hardcoded paths first
+        for path in homebrewPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        // Fall back to PATH lookup
+        return ProcessInfo.processInfo.environment["PATH"]?
             .components(separatedBy: ":")
             .compactMap { URL(fileURLWithPath: $0).appendingPathComponent(name).path }
             .first { FileManager.default.isExecutableFile(atPath: $0) }

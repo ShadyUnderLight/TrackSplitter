@@ -1,0 +1,38 @@
+# project.yml - XcodeGen 配置
+name: TrackSplitter
+options:
+  bundleIdPrefix: com.tracksplitter
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+targets:
+  TrackSplitter:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        type: group
+      - path: Views
+        type: group
+      - path: ViewModels
+        type: group
+      - path: ../Library
+        type: group
+        name: TrackSplitterLib
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tracksplitter.gui
+        PRODUCT_NAME: TrackSplitter
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+        SKIP_INSTALL: NO
+        INSTALL_PATH: "/Applications"
