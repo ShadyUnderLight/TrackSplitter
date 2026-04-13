@@ -14,6 +14,9 @@ targets:
     sources:
       - path: App
         type: group
+        excludes:
+          - "TrackSplitter.iconset"
+          - "*.iconset"
       - path: Views
         type: group
       - path: ViewModels
@@ -36,3 +39,4 @@ targets:
           - "@executable_path/../Frameworks"
         SKIP_INSTALL: NO
         INSTALL_PATH: "/Applications"
+        GENERATE_INFOPLIST_FILE: NO
