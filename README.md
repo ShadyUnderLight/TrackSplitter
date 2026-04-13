@@ -1,22 +1,22 @@
 # TrackSplitter
 
-> Split FLAC+CUE albums into individual tracks — with metadata and album art.
+> 将 FLAC+CUE 整轨专辑拆分为分轨文件，自动写入元数据和专辑封面。
 
-## What it does
+## 功能一览
 
-1. Reads a `.flac` file and its companion `.cue` sheet
-2. Parses track titles and timestamps from the CUE
-3. Splits the FLAC into separate `.flac` files using `ffmpeg`
-4. Fetches and embeds album artwork
-5. Writes full metadata: title, artist, album, year, genre, track number, total tracks, cover art
+1. 读取 `.flac` 整轨文件及其对应的 `.cue` 曲目表
+2. 解析 CUE 中的曲目标题和时间码
+3. 使用 `ffmpeg` 将 FLAC 拆分为独立的分轨文件
+4. 自动从网上抓取并嵌入专辑封面（支持 leftfm.com、MusicBrainz、iTunes）
+5. 写入完整元数据：标题、艺人、专辑、年份、风格、轨号、总轨数、封面图
 
-## Requirements
+## 环境要求
 
 - **macOS 13+**
 - **ffmpeg** — `brew install ffmpeg`
 - **Python 3 + mutagen** — `pip3 install mutagen --break-system-packages`
 
-## Build from source
+## 从源码构建
 
 ```bash
 git clone https://github.com/ShadyUnderLight/TrackSplitter.git
@@ -24,70 +24,64 @@ cd TrackSplitter
 swift build --configuration release
 ```
 
-The binary is at `.build/arm64-apple-macosx/release/tracksplitter`.
+编译产物位于 `.build/arm64-apple-macosx/release/tracksplitter`。
 
-## Install to PATH
+## 安装到 PATH
 
 ```bash
 ln -s ~/.swift/projects/TrackSplitter/.build/arm64-apple-macosx/release/tracksplitter /usr/local/bin/tracksplitter
 ```
 
-Or with Swift Package Manager:
-
-```bash
-swift install tracksplitter  # coming soon
-```
-
-## Usage
+## 使用方式
 
 ```bash
 tracksplitter "/path/to/陈升-别让我哭.flac"
 ```
 
-The tool looks for a `.cue` file with the same base name in the same directory. Output is written to a subfolder named after the album title in the same directory as the source FLAC.
+工具会在 FLAC 文件同目录下查找同名 `.cue` 文件，输出到以专辑名命名的子文件夹中。
 
 ```
-📂 /path/to/陈升-别让我哭/陈升-别让我哭/
+📂 /path/to/陈升-别让我哭/
   ├── 01. 別讓我哭.flac
   ├── 02. 嘿！我要走了.flac
   ├── 03. Vivien.flac
   └── ...
 ```
 
-## Architecture
+## 项目结构
 
 ```
 TrackSplitter/
-├── Package.swift              # Swift Package Manager manifest
+├── Package.swift              # Swift Package Manager 清单
 ├── CLI/
-│   └── main.swift             # Entry point + argument parsing
+│   └── main.swift             # 入口 + 参数解析
 ├── Library/
-│   ├── CueParser.swift        # CUE sheet parser (Big5/UTF-8)
-│   ├── AlbumArtFetcher.swift  # Album art fetcher (leftfm.com)
-│   ├── FLACSplitter.swift     # ffmpeg orchestration
-│   ├── MetadataEmbedder.swift # Python/mutagen bridge
-│   └── TrackSplitterEngine.swift  # Main orchestrator
+│   ├── CueParser.swift        # CUE 解析器（支持 Big5/UTF-8）
+│   ├── AlbumArtFetcher.swift  # 封面抓取（leftfm / MusicBrainz / iTunes）
+│   ├── FLACSplitter.swift     # ffmpeg 拆分调度
+│   ├── MetadataEmbedder.swift # Python/mutagen 桥接
+│   └── TrackSplitterEngine.swift  # 核心编排引擎
 └── Resources/
-    └── embed_metadata.py      # Metadata writing helper
+    └── embed_metadata.py      # FLAC 元数据写入脚本
 ```
 
-## How it works
+## 技术细节
 
-### CUE parsing
-The CUE sheet is read with multi-encoding detection (Big5 → CP950 → UTF-8) so traditional Chinese filenames in CUE files are handled correctly. Track times are converted from `MM:SS:FF` (75 frames/second) to decimal seconds.
+### CUE 解析
+CUE 曲目表支持多编码识别（Big5 → CP950 → UTF-8），正确处理繁体中文文件名。时间码从 `MM:SS:FF`（75 帧/秒）转换为十进制秒数。
 
-### Splitting
-`ffmpeg` is invoked per-track with `-ss` / `-t` flags. The last track's duration is derived from the file's total duration (queried via `ffprobe`).
+### 拆分
+通过 `ffmpeg -ss / -t` 逐轨拆分，最后一轨的时长由 `ffprobe` 获取文件总时长后计算得出。
 
-### Metadata embedding
-A Python helper script (`embed_metadata.py`) is called via `Process`. It uses `mutagen` to write FLAC Vorbis comments and embed the JPEG cover art into each file's Picture block.
+### 元数据写入
+调用 Python 辅助脚本 `embed_metadata.py`，通过 `mutagen` 库写入 FLAC Vorbis 标签并将 JPEG 封面嵌入文件 Picture 区块。
 
-## Known limitations
+## 已知限制
 
-- Only FLAC output is supported (MP3/AAC conversion planned)
-- `ffmpeg` and `python3` must be in `PATH`
-- Album art fetching currently targets `leftfm.com` only (extensible to other sources)
+- 仅支持 FLAC 输出（MP3/AAC 转换尚未实现）
+- ffmpeg 和 python3 必须可用（GUI 版本会自动查找 homebrew 路径）
+- 封面抓取来源为 leftfm.com / MusicBrainz / iTunes，部分冷门专辑可能抓取失败
 
-## License
+## 开源许可
 
 MIT
