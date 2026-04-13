@@ -26,6 +26,10 @@ public actor TrackSplitterEngine {
         public let trackFiles: [URL]
         public let albumTitle: String?
         public let performer: String?
+        /// Whether cover art was successfully fetched and embedded.
+        public let coverEmbedded: Bool
+        /// Per-track metadata embedding result.
+        public let metadataResult: MetadataEmbedder.EmbedResult
     }
 
     public struct LogHandler: @unchecked Sendable {
@@ -99,10 +103,11 @@ public actor TrackSplitterEngine {
             throw EngineError.splittingFailed(error.localizedDescription)
         }
 
-        // 6. Embed metadata
+        // 6. Embed metadata (fatal on failure)
+        let metadataResult: MetadataEmbedder.EmbedResult
         log("🏷  Embedding metadata...")
         do {
-            try await embedder.embedBatch(
+            metadataResult = try await embedder.embedBatch(
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
                 artist: performer ?? "Unknown Artist",
                 album: albumTitle ?? albumDirName,
@@ -111,13 +116,24 @@ public actor TrackSplitterEngine {
                 totalTracks: tracks.count,
                 coverData: coverData
             )
-            log("✅  Metadata embedded for all tracks")
+            if metadataResult.isFullySuccessful {
+                log("✅  Metadata embedded for all \(metadataResult.succeeded) tracks")
+            } else if metadataResult.isPartiallySuccessful {
+                log("⚠️  Metadata partially embedded: \(metadataResult.succeeded)/\(metadataResult.total) succeeded, \(metadataResult.failed) failed")
+            } else {
+                log("❌  Metadata embedding failed for all \(metadataResult.failed) tracks")
+                throw EngineError.metadataFailed(
+                    metadataResult.failures.joined(separator: "; ")
+                )
+            }
         } catch {
-            log("⚠️  Metadata embedding failed: \(error.localizedDescription)")
-            // Non-fatal — tracks were still split successfully
+            log("❌  Metadata embedding failed: \(error.localizedDescription)")
+            throw EngineError.metadataFailed(error.localizedDescription)
         }
 
         return Result(outputDirectory: outDir, trackFiles: splitTracks,
-                      albumTitle: albumTitle, performer: performer)
+                      albumTitle: albumTitle, performer: performer,
+                      coverEmbedded: coverData != nil,
+                      metadataResult: metadataResult)
     }
 }

@@ -5,18 +5,18 @@ from mutagen.flac import FLAC, Picture
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: embed_metadata.py <json_file>", file=sys.stderr)
+        print("ERROR: Usage: embed_metadata.py <json_file>", file=sys.stderr)
         sys.exit(1)
 
     json_path = sys.argv[1]
     if not os.path.exists(json_path):
-        print("FILE_NOT_FOUND: %s" % json_path, file=sys.stderr)
+        print("ERROR: JSON file not found: %s" % json_path)
         sys.exit(1)
 
     try:
         payload = json.load(open(json_path))
     except Exception as e:
-        print("JSON load error: %s" % e, file=sys.stderr)
+        print("ERROR: JSON load error: %s" % e)
         sys.exit(1)
 
     cover_bytes = None
@@ -29,7 +29,7 @@ def main():
     for item in payload.get("files", []):
         fpath = item.get("path", "")
         if not os.path.exists(fpath):
-            print("FILE_NOT_FOUND: %s" % fpath, file=sys.stderr)
+            print("ERROR: %s: file not found" % os.path.basename(fpath))
             continue
 
         try:
@@ -57,7 +57,7 @@ def main():
             audio.save()
             print("DONE: %s" % os.path.basename(fpath))
         except Exception as e:
-            print("ERROR: %s: %s" % (os.path.basename(fpath), e), file=sys.stderr)
+            print("ERROR: %s: %s" % (os.path.basename(fpath), e))
 
 if __name__ == "__main__":
     main()
