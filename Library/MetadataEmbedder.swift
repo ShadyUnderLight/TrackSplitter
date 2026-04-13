@@ -21,6 +21,16 @@ public actor MetadataEmbedder {
         }
     }
 
+    public struct EmbedResult: Sendable {
+        public let total: Int
+        public let succeeded: Int
+        public let failed: Int
+        public let failures: [String]
+
+        public var isFullySuccessful: Bool { failed == 0 }
+        public var isPartiallySuccessful: Bool { succeeded > 0 && failed > 0 }
+    }
+
     private let pythonPath: String
     private let scriptPath: String
 
@@ -35,12 +45,11 @@ public actor MetadataEmbedder {
     }
 
     /// Walk up from the executable's directory to find embed_metadata.py.
-/// Handles SPM development builds, release builds, and installed layouts.
+    /// Handles SPM development builds, release builds, and installed layouts.
     private static func locateScript() -> String {
         let exeDir = (CommandLine.arguments.first.map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
             ?? FileManager.default.currentDirectoryPath)
 
-        // Build search paths using URL resolved against executable directory
         let exeURL = URL(fileURLWithPath: exeDir)
         let searchPaths: [URL] = [
             exeURL.appendingPathComponent("embed_metadata.py"),
@@ -57,10 +66,11 @@ public actor MetadataEmbedder {
             }
         }
 
-        return "embed_metadata.py"  // last resort: rely on PATH
+        return "embed_metadata.py"
     }
 
     /// Embed metadata into multiple FLAC files at once.
+    /// Returns a per-file result indicating success/failure for each track.
     public func embedBatch(
         files: [(url: URL, title: String, trackNumber: Int)],
         artist: String,
@@ -69,7 +79,7 @@ public actor MetadataEmbedder {
         genre: String,
         totalTracks: Int,
         coverData: Data?
-    ) async throws {
+    ) async throws -> EmbedResult {
         struct Item: Encodable {
             let path: String; let title: String; let artist: String
             let album: String; let year: String; let genre: String
@@ -98,11 +108,33 @@ public actor MetadataEmbedder {
         }
 
         defer { try? FileManager.default.removeItem(at: tempFile) }
-        try await runScript(jsonFile: tempFile)
+
+        let (stdout, stderr, rc) = try await runScript(jsonFile: tempFile)
+
+        // Parse per-file results from stdout
+        var succeeded = 0
+        var failed = 0
+        var failures: [String] = []
+
+        for line in stdout.components(separatedBy: .newlines).filter({ !$0.isEmpty }) {
+            if line.hasPrefix("DONE: ") {
+                succeeded += 1
+            } else if line.hasPrefix("ERROR: ") {
+                failed += 1
+                failures.append(String(line.dropFirst(7)))
+            }
+        }
+
+        if rc != 0 && succeeded == 0 && failed == 0 {
+            failed = files.count
+            failures = ["脚本执行失败（RC=\(rc)）：\(stderr.prefix(100))"]
+        }
+
+        return EmbedResult(total: files.count, succeeded: succeeded, failed: failed, failures: failures)
     }
 
-    private func runScript(jsonFile: URL) async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+    private func runScript(jsonFile: URL) async throws -> (stdout: String, stderr: String, rc: Int32) {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(String, String, Int32), Error>) in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: pythonPath)
             process.arguments = [scriptPath, jsonFile.path]
@@ -121,13 +153,7 @@ public actor MetadataEmbedder {
                 let stdout = String(data: outData, encoding: .utf8) ?? ""
                 let stderr = String(data: errData, encoding: .utf8) ?? ""
 
-                if process.terminationStatus == 0 {
-                    cont.resume()
-                } else {
-                    cont.resume(throwing: EmbedError.scriptFailed(
-                        "RC=\(process.terminationStatus) STDERR=\(stderr.prefix(200)) STDOUT=\(stdout.prefix(100))"
-                    ))
-                }
+                cont.resume(returning: (stdout, stderr, process.terminationStatus))
             } catch {
                 cont.resume(throwing: error)
             }

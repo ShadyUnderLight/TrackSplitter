@@ -360,11 +360,49 @@ struct ErrorView: View {
     }
 }
 
-// MARK: - ResultView & ProcessingView (已存在，确保引用 SplitterViewModel.Completion)
+// MARK: - ResultView
 struct ResultView: View {
     let result: SplitterViewModel.Completion
     let onShowInFinder: () -> Void
     let onProcessAnother: () -> Void
+
+    private var metadataStatusIcon: String {
+        if result.metadataFailedCount == 0 {
+            return "checkmark.circle.fill"
+        } else if result.metadataFailedCount < result.trackFiles.count {
+            return "exclamationmark.circle.fill"
+        } else {
+            return "xmark.circle.fill"
+        }
+    }
+
+    private var metadataStatusColor: Color {
+        if result.metadataFailedCount == 0 {
+            return .green
+        } else if result.metadataFailedCount < result.trackFiles.count {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+
+    private var metadataStatusText: String {
+        if result.metadataFailedCount == 0 {
+            return "✅ 所有 \(result.metadataSucceededCount) 个曲目元数据写入成功"
+        } else if result.metadataFailedCount < result.trackFiles.count {
+            return "⚠️  \(result.metadataSucceededCount) 个成功，\(result.metadataFailedCount) 个失败"
+        } else {
+            return "❌ 元数据写入全部失败（\(result.metadataFailedCount) 个曲目）"
+        }
+    }
+
+    private var coverStatusText: String {
+        if result.coverEmbedded {
+            return "✅ 封面已嵌入"
+        } else {
+            return "⚠️  封面未获取"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -418,6 +456,48 @@ struct ResultView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
+                    }
+                }
+
+                Divider()
+
+                // 元数据状态
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: metadataStatusIcon)
+                            .foregroundColor(metadataStatusColor)
+                        Text(metadataStatusText)
+                            .font(.subheadline)
+                            .foregroundColor(metadataStatusColor)
+                    }
+                    HStack(spacing: 8) {
+                        Image(systemName: result.coverEmbedded ? "photo.fill" : "photo")
+                            .foregroundColor(result.coverEmbedded ? .green : .orange)
+                        Text(coverStatusText)
+                            .font(.subheadline)
+                            .foregroundColor(result.coverEmbedded ? .green : .orange)
+                    }
+
+                    // 部分失败时显示错误列表
+                    if !result.metadataFailures.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("失败详情：")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                            ForEach(result.metadataFailures.prefix(5), id: \.self) { failure in
+                                Text("• \(failure)")
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                            if result.metadataFailures.count > 5 {
+                                Text("• ...还有 \(result.metadataFailures.count - 5) 条")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color.red.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                 }
 

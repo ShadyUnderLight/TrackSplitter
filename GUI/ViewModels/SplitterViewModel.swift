@@ -43,15 +43,23 @@ final class SplitterViewModel: ObservableObject {
         let albumTitle: String?
         let performer: String?
         let coverImageData: Data?
+        /// Whether cover art was embedded.
+        let coverEmbedded: Bool
+        /// Total tracks that had metadata successfully written.
+        let metadataSucceededCount: Int
+        /// Total tracks that failed metadata writing.
+        let metadataFailedCount: Int
+        /// Cover art fetch error if any.
+        let metadataFailures: [String]
 
         /// 从第一个 FLAC 文件读取封面图数据（Data?）。
-        static func readCover(from files: [URL]) -> Data? {
-            guard let firstTrack = files.first(where: { $0.pathExtension.lowercased() == "flac" }) else { return nil }
-            // 使用 mutagen 读取第一张封面，写入临时 PNG，读取后删除。
+        static func readCover(from files: [URL]) -> (data: Data?, pythonPath: String) {
+            guard let firstTrack = files.first(where: { $0.pathExtension.lowercased() == "flac" }) else {
+                return (nil, "")
+            }
             let tmpPath = NSTemporaryDirectory() + "ts_cover_\(UUID().uuidString).png"
             let script = """
 from mutagen.flac import FLAC
-import sys
 f = FLAC('\(firstTrack.path)')
 if f.pictures:
     open('\(tmpPath)', 'wb').write(f.pictures[0].data)
@@ -59,15 +67,19 @@ if f.pictures:
 else:
     print('NO_COVER')
 """
+            // Use the same python lookup as MetadataEmbedder
+            let candidates = ["/opt/homebrew/bin/python3", "/opt/homebrew/bin/python3.14", "/usr/local/bin/python3", "python3"]
+            let pythonPath = candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "python3"
+
             let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+            proc.executableURL = URL(fileURLWithPath: pythonPath)
             proc.arguments = ["-c", script]
             try? proc.run()
             proc.waitUntilExit()
-            guard FileManager.default.fileExists(atPath: tmpPath) else { return nil }
+            guard FileManager.default.fileExists(atPath: tmpPath) else { return (nil, pythonPath) }
             let data = try? Data(contentsOf: URL(fileURLWithPath: tmpPath))
             try? FileManager.default.removeItem(atPath: tmpPath)
-            return data
+            return (data, pythonPath)
         }
     }
 
@@ -134,13 +146,17 @@ else:
             do {
                 let engine = TrackSplitterEngine(logHandler: handler)
                 let result = try await engine.process(flacURL: loaded.flacURL)
-                let coverData = Completion.readCover(from: result.trackFiles)
+                let (coverData, _) = Completion.readCover(from: result.trackFiles)
                 let completion = Completion(
                     outputDirectory: result.outputDirectory,
                     trackFiles: result.trackFiles,
                     albumTitle: result.albumTitle,
                     performer: result.performer,
-                    coverImageData: coverData
+                    coverImageData: coverData,
+                    coverEmbedded: result.coverEmbedded,
+                    metadataSucceededCount: result.metadataResult.succeeded,
+                    metadataFailedCount: result.metadataResult.failed,
+                    metadataFailures: result.metadataResult.failures
                 )
                 await MainActor.run {
                     self.progress = 1
