@@ -45,6 +45,13 @@ def main():
             audio["TOTALTRACKS"] = item.get("total", "")
             audio["ALBUMARTIST"] = item.get("artist", "")
 
+            if item.get("comment"):
+                audio["COMMENT"] = item["comment"]
+            if item.get("composer"):
+                audio["COMPOSER"] = item["composer"]
+            if item.get("discNumber"):
+                audio["DISCNUMBER"] = item["discNumber"]
+
             if cover_bytes:
                 audio.clear_pictures()
                 pic = Picture()

@@ -106,15 +106,15 @@ else:
         }
 
         do {
-            let parsed = try parseCue(at: cueURL)
-            log("CUE parsed: \(parsed.tracks.count) tracks")
-            let previewTracks = fillPreviewEndTimes(for: parsed.tracks)
+            let (tracks, albumTitle, performer, _, _) = try parseCue(at: cueURL)
+            log("CUE parsed: \(tracks.count) tracks")
+            let previewTracks = fillPreviewEndTimes(for: tracks)
             let loaded = LoadedFiles(
                 flacURL: flacURL,
                 cueURL: cueURL,
                 tracks: previewTracks,
-                albumTitle: parsed.albumTitle,
-                performer: parsed.performer
+                albumTitle: albumTitle,
+                performer: performer
             )
             phase = .loaded(loaded)
             logs = []

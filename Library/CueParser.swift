@@ -28,6 +28,24 @@ public struct CueTrack: Sendable {
     }
 }
 
+/// Represents REM fields parsed from a CUE sheet (album-level metadata).
+public struct CueRem: Sendable {
+    public var date: String?     // REM DATE "..."
+    public var genre: String?    // REM GENRE "..."
+    public var comment: String?  // REM COMMENT "..."
+    public var composer: String?  // REM COMPOSER "..."
+    public var discNumber: String? // REM DISCNUMBER "..."
+
+    public init(date: String? = nil, genre: String? = nil, comment: String? = nil,
+                composer: String? = nil, discNumber: String? = nil) {
+        self.date = date
+        self.genre = genre
+        self.comment = comment
+        self.composer = composer
+        self.discNumber = discNumber
+    }
+}
+
 /// Attempt to decode CUE data, trying UTF-8 → Big5 via iconv → ISO Latin 1 fallback.
 private func decodeCueData(_ data: Data) -> String {
     // Try UTF-8 first
@@ -59,7 +77,7 @@ private func decodeCueData(_ data: Data) -> String {
 }
 
 /// Parse a CUE file, trying multiple encodings for Chinese filename compatibility.
-public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: String?, performer: String?, file: CueFile?) {
+public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: String?, performer: String?, file: CueFile?, rem: CueRem) {
     let data = try Data(contentsOf: url)
     let text = decodeCueData(data)
 
@@ -70,6 +88,7 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
     var curTitle: String = ""
     var curStart: Double = 0
     var cueFile: CueFile?
+    var rem = CueRem()
 
     for raw in text.components(separatedBy: .newlines) {
         let line = raw.trimmingCharacters(in: .whitespaces)
@@ -104,13 +123,33 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
         else if let ts = parseTimestamp(line: line, pattern: "INDEX 01 (\\d+):(\\d+):(\\d+)$") {
             curStart = ts
         }
+        // REM DATE "..."
+        else if let cap = match(line: line, pattern: #"REM DATE "?(.+)"?$"#) {
+            rem.date = cap.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
+        // REM GENRE "..."
+        else if let cap = match(line: line, pattern: #"REM GENRE "?(.+)"?$"#) {
+            rem.genre = cap.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
+        // REM COMMENT "..."
+        else if let cap = match(line: line, pattern: #"REM COMMENT "?(.+)"?$"#) {
+            rem.comment = cap.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
+        // REM COMPOSER "..."
+        else if let cap = match(line: line, pattern: #"REM COMPOSER "?(.+)"?$"#) {
+            rem.composer = cap.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
+        // REM DISCNUMBER "..."
+        else if let cap = match(line: line, pattern: #"REM DISCNUMBER "?(.+)"?$"#) {
+            rem.discNumber = cap.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        }
     }
 
     if curIdx > 0 {
         tracks.append(CueTrack(index: curIdx, title: curTitle, startSeconds: curStart))
     }
 
-    return (tracks, albumTitle, performer, cueFile)
+    return (tracks, albumTitle, performer, cueFile, rem)
 }
 
 /// Find the .cue file corresponding to a FLAC URL.

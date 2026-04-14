@@ -25,14 +25,14 @@ final class SplitterViewModel: ObservableObject {
 
         do {
             // 解析 CUE 并构造用于预览的曲目时间区间。
-            let parsed = try parseCue(at: cueURL)
-            let previewTracks = fillPreviewEndTimes(for: parsed.tracks)
+            let (tracks, albumTitle, performer, _, _) = try parseCue(at: cueURL)
+            let previewTracks = fillPreviewEndTimes(for: tracks)
             let loaded = AppState.LoadedFiles(
                 flacURL: flacURL,
                 cueURL: cueURL,
                 tracks: previewTracks,
-                albumTitle: parsed.albumTitle,
-                performer: parsed.performer
+                albumTitle: albumTitle,
+                performer: performer
             )
             appState.phase = .loaded(loaded)
             appState.logs = []

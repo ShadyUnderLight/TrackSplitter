@@ -65,8 +65,9 @@ public actor TrackSplitterEngine {
         log("📋 CUE found: \(cueURL.lastPathComponent)")
 
         // 2. Parse CUE (handles Chinese encodings via Big5/CP950 detection)
-        let (tracks, albumTitle, performer, cueFile) = try parseCue(at: cueURL)
+        let (tracks, albumTitle, performer, cueFile, cueRem) = try parseCue(at: cueURL)
         log("🎵 Tracks: \(tracks.count) | Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
+        log("📋 REM: date=\(cueRem.date ?? "—") genre=\(cueRem.genre ?? "—") comment=\(cueRem.comment ?? "—") composer=\(cueRem.composer ?? "—") discNumber=\(cueRem.discNumber ?? "—")")
 
         // 2b. Validate FILE field if present
         if let cf = cueFile {
@@ -123,8 +124,11 @@ public actor TrackSplitterEngine {
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
                 artist: performer ?? "Unknown Artist",
                 album: albumTitle ?? albumDirName,
-                year: "1992",
-                genre: "流行",
+                year: cueRem.date ?? "",
+                genre: cueRem.genre ?? "",
+                comment: cueRem.comment,
+                composer: cueRem.composer,
+                discNumber: cueRem.discNumber,
                 totalTracks: tracks.count,
                 coverData: coverData
             )
