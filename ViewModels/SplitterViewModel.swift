@@ -70,7 +70,9 @@ final class SplitterViewModel: ObservableObject {
                     outputDirectory: result.outputDirectory,
                     trackFiles: result.trackFiles,
                     albumTitle: result.albumTitle,
-                    performer: result.performer
+                    performer: result.performer,
+                    coverEmbedded: result.coverEmbedded,
+                    metadataResult: result.metadataResult
                 )
 
                 await MainActor.run {
