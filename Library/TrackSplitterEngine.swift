@@ -9,6 +9,7 @@ public actor TrackSplitterEngine {
         case outputDirCreationFailed
         case splittingFailed(String)
         case metadataFailed(String)
+        case cueFileMismatch(cueDeclaredFile: String, actualFlacFile: String)
 
         public var errorDescription: String? {
             switch self {
@@ -17,6 +18,8 @@ public actor TrackSplitterEngine {
             case .outputDirCreationFailed: return "Failed to create output directory"
             case .splittingFailed(let msg): return "Splitting failed: \(msg)"
             case .metadataFailed(let msg): return "Metadata embedding failed: \(msg)"
+            case .cueFileMismatch(let cueDeclaredFile, let actualFlacFile):
+                return "CUE FILE field mismatch: CUE declares \"\(cueDeclaredFile)\" but input is \"\(actualFlacFile)\". Please ensure the FILE field in the CUE matches the actual audio file."
             }
         }
     }
@@ -62,8 +65,17 @@ public actor TrackSplitterEngine {
         log("📋 CUE found: \(cueURL.lastPathComponent)")
 
         // 2. Parse CUE (handles Chinese encodings via Big5/CP950 detection)
-        let (tracks, albumTitle, performer) = try parseCue(at: cueURL)
+        let (tracks, albumTitle, performer, cueFile) = try parseCue(at: cueURL)
         log("🎵 Tracks: \(tracks.count) | Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
+
+        // 2b. Validate FILE field if present
+        if let cf = cueFile {
+            let cueDeclaredName = cf.resolvedURL.lastPathComponent
+            if cueDeclaredName != flacURL.lastPathComponent {
+                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(flacURL.lastPathComponent)\"")
+                throw EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualFlacFile: flacURL.lastPathComponent)
+            }
+        }
 
         guard !tracks.isEmpty else { throw EngineError.emptyTracks }
 
