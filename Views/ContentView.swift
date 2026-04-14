@@ -27,6 +27,7 @@ struct ContentView: View {
             case .complete(let completion):
                 ResultView(
                     result: completion,
+                    logs: viewModel.appState.logs,
                     onShowInFinder: { showInFinder(directory: completion.outputDirectory) },
                     onProcessAnother: { viewModel.processAnother() }
                 )

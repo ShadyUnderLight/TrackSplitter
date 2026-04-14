@@ -43,6 +43,10 @@ final class AppState: ObservableObject {
         let albumTitle: String?
         /// 艺术家（可能为空）。
         let performer: String?
+        /// 封面图是否写入成功。
+        let coverEmbedded: Bool
+        /// 每个 track 的元数据写入结果（按 trackFiles 顺序）。
+        let metadataResult: MetadataEmbedder.EmbedResult
     }
 
     /// 当前阶段。
