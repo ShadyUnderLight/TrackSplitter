@@ -77,6 +77,9 @@ public actor MetadataEmbedder {
         album: String,
         year: String,
         genre: String,
+        comment: String?,
+        composer: String?,
+        discNumber: String?,
         totalTracks: Int,
         coverData: Data?
     ) async throws -> EmbedResult {
@@ -84,11 +87,15 @@ public actor MetadataEmbedder {
             let path: String; let title: String; let artist: String
             let album: String; let year: String; let genre: String
             let tracknum: String; let total: String
+            let comment: String?
+            let composer: String?
+            let discNumber: String?
         }
 
         let items = files.map { f in
             Item(path: f.url.path, title: f.title, artist: artist, album: album,
-                 year: year, genre: genre, tracknum: String(f.trackNumber), total: String(totalTracks))
+                 year: year, genre: genre, tracknum: String(f.trackNumber), total: String(totalTracks),
+                 comment: comment, composer: composer, discNumber: discNumber)
         }
 
         let coverB64: String? = coverData.map { Data($0).base64EncodedString() }
