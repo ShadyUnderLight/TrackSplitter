@@ -26,8 +26,6 @@ let package = Package(
                 "FLACSplitter.swift",
                 "MetadataEmbedder.swift",
                 "TrackSplitterEngine.swift",
-                "WebGUI.swift",
-                "WebUIHTML.swift",
             ]
         ),
         .executableTarget(
