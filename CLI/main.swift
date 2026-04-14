@@ -16,15 +16,10 @@ struct TrackSplitterCLI {
             return
         }
 
-        if args.contains("--gui") {
-            runGUI()
-            return
-        }
-
         // CLI mode: positional FLAC path
         let flacPath = args.first { !$0.hasPrefix("-") }
         guard let flacPath else {
-            print("Error: No FLAC file specified. Use --gui for the graphical interface, or pass a .flac file path.")
+            print("Error: No FLAC file specified. Pass a .flac file path.")
             print("Run 'tracksplitter --help' for usage.")
             exit(1)
         }
@@ -77,64 +72,19 @@ struct TrackSplitterCLI {
         }
     }
 
-    // MARK: - GUI mode
-
-    private static func runGUI() {
-        let server = WebGUIServer(port: 7890)
-
-        print("🎨 TrackSplitter GUI\n")
-
-        do {
-            let url = try server.start(
-                onProgress: { msg in
-                    print(msg)
-                },
-                onComplete: { result in
-                    switch result {
-                    case .success(let path):
-                        print("\n✅ Done! \(path)")
-                    case .failure(let err):
-                        print("\n❌ Error: \(err.localizedDescription)")
-                    }
-                }
-            )
-
-            print("🌐 Opening browser at: \(url)")
-            openBrowser(url: url)
-
-            // Block forever — server runs on its own queue
-            print("\nServer running. Press Ctrl+C to stop.\n")
-            dispatchMain()
-
-        } catch {
-            print("❌ Failed to start GUI server: \(error.localizedDescription)")
-            exit(1)
-        }
-    }
-
-    private static func openBrowser(url: String) {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        proc.arguments = [url]
-        try? proc.run()
-    }
-
     // MARK: - Help text
 
     static let helpText = """
     TrackSplitter — Split FLAC+CUE albums into individual tracks with metadata.
 
     Usage:
-      tracksplitter --gui              Open the graphical web interface
       tracksplitter <file.flac>        Process a FLAC file from the command line
 
     Options:
-      --gui, -g   Launch the web-based graphical interface
       --help, -h  Show this help
       --version   Show version
 
     Examples:
-      tracksplitter --gui
       tracksplitter "/Users/music/陈升-别让我哭.flac"
 
     Requirements:
