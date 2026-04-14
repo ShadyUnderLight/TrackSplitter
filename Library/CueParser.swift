@@ -1,5 +1,18 @@
 import Foundation
 
+/// Represents the FILE field in a CUE sheet.
+public struct CueFile: Sendable {
+    /// Raw path string as declared in CUE FILE "..." WAVE
+    public let path: String
+    /// Resolved URL relative to the CUE file's directory
+    public let resolvedURL: URL
+
+    public init(path: String, resolvedURL: URL) {
+        self.path = path
+        self.resolvedURL = resolvedURL
+    }
+}
+
 /// Represents a single track parsed from a CUE sheet.
 public struct CueTrack: Sendable {
     public let index: Int
@@ -46,7 +59,7 @@ private func decodeCueData(_ data: Data) -> String {
 }
 
 /// Parse a CUE file, trying multiple encodings for Chinese filename compatibility.
-public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: String?, performer: String?) {
+public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: String?, performer: String?, file: CueFile?) {
     let data = try Data(contentsOf: url)
     let text = decodeCueData(data)
 
@@ -56,6 +69,7 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
     var curIdx: Int = 0
     var curTitle: String = ""
     var curStart: Double = 0
+    var cueFile: CueFile?
 
     for raw in text.components(separatedBy: .newlines) {
         let line = raw.trimmingCharacters(in: .whitespaces)
@@ -69,6 +83,13 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
             } else {
                 albumTitle = cap
             }
+        }
+        // FILE "..." WAVE — parse audio file reference
+        else if let filePath = match(line: line, pattern: #"FILE "([^"]+)""#) {
+            let fileName = filePath.trimmingCharacters(in: .whitespaces)
+            let cueDir = url.deletingLastPathComponent()
+            let resolvedURL = cueDir.appendingPathComponent(fileName)
+            cueFile = CueFile(path: filePath, resolvedURL: resolvedURL)
         }
         // TRACK nn AUDIO
         else if let numStr = match(line: line, pattern: #"TRACK (\d+) AUDIO"#) {
@@ -89,7 +110,7 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
         tracks.append(CueTrack(index: curIdx, title: curTitle, startSeconds: curStart))
     }
 
-    return (tracks, albumTitle, performer)
+    return (tracks, albumTitle, performer, cueFile)
 }
 
 /// Find the .cue file corresponding to a FLAC URL.
