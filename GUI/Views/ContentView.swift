@@ -12,7 +12,7 @@ struct ContentView: View {
             switch viewModel.phase {
             case .idle:
                 IdleView(onFileSelected: { url in
-                    viewModel.load(flacURL: url)
+                    viewModel.load(audioURL: url)
                 })
 
             case .loaded(let loaded):
@@ -48,7 +48,7 @@ struct ContentView: View {
         .frame(minWidth: 640, minHeight: 480)
         .onReceive(NotificationCenter.default.publisher(for: .didSelectFlacFile)) { notification in
             if let url = notification.object as? URL {
-                viewModel.load(flacURL: url)
+                viewModel.load(audioURL: url)
             }
         }
     }
@@ -279,7 +279,7 @@ struct LoadedView: View {
                     Text(loaded.performer ?? "未知艺术家")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text(loaded.flacURL.lastPathComponent)
+                    Text(loaded.audioURL.lastPathComponent)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

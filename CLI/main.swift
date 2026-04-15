@@ -16,29 +16,31 @@ struct TrackSplitterCLI {
             return
         }
 
-        // CLI mode: positional FLAC path
-        let flacPath = args.first { !$0.hasPrefix("-") }
-        guard let flacPath else {
-            print("Error: No FLAC file specified. Pass a .flac file path.")
+        // CLI mode: positional audio file path
+        let audioPath = args.first { !$0.hasPrefix("-") }
+        guard let audioPath else {
+            print("Error: No audio file specified. Pass a supported audio file path.")
             print("Run 'tracksplitter --help' for usage.")
             exit(1)
         }
 
-        runCLI(flacPath: flacPath)
+        runCLI(audioPath: audioPath)
     }
 
     // MARK: - CLI mode
 
-    private static func runCLI(flacPath: String) {
-        let flacURL = URL(fileURLWithPath: flacPath)
+    private static func runCLI(audioPath: String) {
+        let audioURL = URL(fileURLWithPath: audioPath)
 
-        guard FileManager.default.fileExists(atPath: flacURL.path) else {
-            print("Error: File not found: \(flacPath)")
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            print("Error: File not found: \(audioPath)")
             exit(1)
         }
 
-        guard flacURL.pathExtension.lowercased() == "flac" else {
-            print("Error: File is not a FLAC file: \(flacURL.lastPathComponent)")
+        let supported: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
+        guard supported.contains(audioURL.pathExtension.lowercased()) else {
+            print("Error: Unsupported file format: \(audioURL.lastPathComponent)")
+            print("Supported: FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus")
             exit(1)
         }
 
@@ -55,7 +57,7 @@ struct TrackSplitterCLI {
 
         Task {
             do {
-                let result = try await engine.process(flacURL: flacURL)
+                let result = try await engine.process(inputURL: audioURL)
                 print("\n✅ Done! \(result.trackFiles.count) tracks saved to:")
                 print("   \(result.outputDirectory.path)")
             } catch {
@@ -75,10 +77,12 @@ struct TrackSplitterCLI {
     // MARK: - Help text
 
     static let helpText = """
-    TrackSplitter — Split FLAC+CUE albums into individual tracks with metadata.
+    TrackSplitter — Split audio+CUE albums into individual tracks with metadata.
+
+    Supported formats: FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus
 
     Usage:
-      tracksplitter <file.flac>        Process a FLAC file from the command line
+      tracksplitter <file>        Process an audio file from the command line
 
     Options:
       --help, -h  Show this help
@@ -86,6 +90,7 @@ struct TrackSplitterCLI {
 
     Examples:
       tracksplitter "/Users/music/陈升-别让我哭.flac"
+      tracksplitter "/Users/music/album.mp3"
 
     Requirements:
       • ffmpeg    (brew install ffmpeg)

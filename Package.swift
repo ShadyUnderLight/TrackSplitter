@@ -23,7 +23,7 @@ let package = Package(
             sources: [
                 "CueParser.swift",
                 "AlbumArtFetcher.swift",
-                "FLACSplitter.swift",
+                "AudioSplitter.swift",
                 "MetadataEmbedder.swift",
                 "TrackSplitterEngine.swift",
             ]

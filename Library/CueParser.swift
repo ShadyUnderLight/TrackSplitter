@@ -152,14 +152,36 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
     return (tracks, albumTitle, performer, cueFile, rem)
 }
 
-/// Find the .cue file corresponding to a FLAC URL.
-public func findCue(for flacURL: URL) -> URL? {
-    let dir = flacURL.deletingLastPathComponent()
-    let base = flacURL.deletingPathExtension().lastPathComponent
+/// Find the .cue file corresponding to an audio URL.
+/// For FLAC files, tries filename-based lookup first; for all formats,
+/// falls back to scanning all .cue files and validating via the FILE field.
+public func findCue(for audioURL: URL) -> URL? {
+    let dir = audioURL.deletingLastPathComponent()
+    let base = audioURL.deletingPathExtension().lastPathComponent
+
+    // Try filename-based match (works for FLAC when cue shares the same base name)
     for ext in ["cue", "CUE", "Cue"] {
         let candidate = dir.appendingPathComponent(base).appendingPathExtension(ext)
         if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
     }
+
+    // Fallback: scan all .cue files in the directory and match via CUE FILE field
+    guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else {
+        return nil
+    }
+    for entry in entries {
+        let ext = (entry as NSString).pathExtension.lowercased()
+        if ext != "cue" { continue }
+        let cueURL = dir.appendingPathComponent(entry)
+        // Validate by parsing the FILE field via the existing parseCue function
+        if let (tracks, _, _, cueFile, _) = try? parseCue(at: cueURL),
+           !tracks.isEmpty,
+           let cf = cueFile,
+           cf.resolvedURL.lastPathComponent == audioURL.lastPathComponent {
+            return cueURL
+        }
+    }
+
     return nil
 }
 

@@ -26,14 +26,14 @@ final class SplitterViewModel: ObservableObject {
     }
 
     struct LoadedFiles: Equatable {
-        let flacURL: URL
+        let audioURL: URL
         let cueURL: URL
         let tracks: [CueTrack]
         let albumTitle: String?
         let performer: String?
 
         static func == (lhs: LoadedFiles, rhs: LoadedFiles) -> Bool {
-            lhs.flacURL == rhs.flacURL && lhs.cueURL == rhs.cueURL
+            lhs.audioURL == rhs.audioURL && lhs.cueURL == rhs.cueURL
         }
     }
 
@@ -90,18 +90,19 @@ else:
     @Published var errorMessage: String = ""
 
     // MARK: - Actions
-    func load(flacURL: URL) {
-        log("load() called: \(flacURL.path)")
+    func load(audioURL: URL) {
+        log("load() called: \(audioURL.path)")
 
-        guard flacURL.pathExtension.lowercased() == "flac" else {
-            log("FAIL: not .flac")
-            setError("仅支持 .flac 文件")
+        let supported: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
+        guard supported.contains(audioURL.pathExtension.lowercased()) else {
+            log("FAIL: unsupported format")
+            setError("不支持的文件格式。支持：FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus")
             return
         }
 
-        guard let cueURL = findCue(for: flacURL) else {
+        guard let cueURL = findCue(for: audioURL) else {
             log("FAIL: CUE not found")
-            setError("未找到同名 CUE 文件：\(flacURL.deletingPathExtension().lastPathComponent).cue")
+            setError("未找到匹配的 CUE 文件（请确认 CUE 中 FILE 字段与音频文件名一致）")
             return
         }
 
@@ -110,7 +111,7 @@ else:
             log("CUE parsed: \(tracks.count) tracks")
             let previewTracks = fillPreviewEndTimes(for: tracks)
             let loaded = LoadedFiles(
-                flacURL: flacURL,
+                audioURL: audioURL,
                 cueURL: cueURL,
                 tracks: previewTracks,
                 albumTitle: albumTitle,
@@ -145,7 +146,7 @@ else:
         Task {
             do {
                 let engine = TrackSplitterEngine(logHandler: handler)
-                let result = try await engine.process(flacURL: loaded.flacURL)
+                let result = try await engine.process(inputURL: loaded.audioURL)
                 let (coverData, _) = Completion.readCover(from: result.trackFiles)
                 let completion = Completion(
                     outputDirectory: result.outputDirectory,

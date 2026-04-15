@@ -9,7 +9,7 @@ public actor TrackSplitterEngine {
         case outputDirCreationFailed
         case splittingFailed(String)
         case metadataFailed(String)
-        case cueFileMismatch(cueDeclaredFile: String, actualFlacFile: String)
+        case cueFileMismatch(cueDeclaredFile: String, actualAudioFile: String)
 
         public var errorDescription: String? {
             switch self {
@@ -18,8 +18,8 @@ public actor TrackSplitterEngine {
             case .outputDirCreationFailed: return "Failed to create output directory"
             case .splittingFailed(let msg): return "Splitting failed: \(msg)"
             case .metadataFailed(let msg): return "Metadata embedding failed: \(msg)"
-            case .cueFileMismatch(let cueDeclaredFile, let actualFlacFile):
-                return "CUE FILE field mismatch: CUE declares \"\(cueDeclaredFile)\" but input is \"\(actualFlacFile)\". Please ensure the FILE field in the CUE matches the actual audio file."
+            case .cueFileMismatch(let cueDeclaredFile, let actualAudioFile):
+                return "CUE FILE field mismatch: CUE declares \"\(cueDeclaredFile)\" but input is \"\(actualAudioFile)\". Please ensure the FILE field in the CUE matches the actual audio file."
             }
         }
     }
@@ -41,7 +41,7 @@ public actor TrackSplitterEngine {
         public func log(_ msg: String) { callback(msg) }
     }
 
-    private let splitter = FLACSplitter()
+    private let splitter = AudioSplitter()
     private let fetcher  = AlbumArtFetcher()
     private let embedder = MetadataEmbedder()
     private let logHandler: LogHandler?
@@ -54,13 +54,14 @@ public actor TrackSplitterEngine {
         logHandler?.log(msg)
     }
 
-    /// Process a FLAC+CUE pair and produce individual track FLAC files with metadata.
-    public func process(flacURL: URL) async throws -> Result {
-        log("📂 Input: \(flacURL.lastPathComponent)")
+    /// Process an audio file + CUE sheet and produce individual track files with metadata.
+    /// Supported input formats: FLAC, MP3, WAV, AIFF, ALAC, M4A, AAC, OGG, Opus.
+    public func process(inputURL: URL) async throws -> Result {
+        log("📂 Input: \(inputURL.lastPathComponent)")
 
-        // 1. Find CUE
-        guard let cueURL = findCue(for: flacURL) else {
-            throw EngineError.noCueFile(flacURL)
+        // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
+        guard let cueURL = findCue(for: inputURL) else {
+            throw EngineError.noCueFile(inputURL)
         }
         log("📋 CUE found: \(cueURL.lastPathComponent)")
 
@@ -72,17 +73,17 @@ public actor TrackSplitterEngine {
         // 2b. Validate FILE field if present
         if let cf = cueFile {
             let cueDeclaredName = cf.resolvedURL.lastPathComponent
-            if cueDeclaredName != flacURL.lastPathComponent {
-                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(flacURL.lastPathComponent)\"")
-                throw EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualFlacFile: flacURL.lastPathComponent)
+            if cueDeclaredName != inputURL.lastPathComponent {
+                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(inputURL.lastPathComponent)\"")
+                throw EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualAudioFile: inputURL.lastPathComponent)
             }
         }
 
         guard !tracks.isEmpty else { throw EngineError.emptyTracks }
 
         // 3. Create output directory
-        let albumDirName = albumTitle ?? flacURL.deletingPathExtension().lastPathComponent
-        let outDir = flacURL.deletingLastPathComponent().appendingPathComponent(albumDirName)
+        let albumDirName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
+        let outDir = inputURL.deletingLastPathComponent().appendingPathComponent(albumDirName)
         do {
             try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
@@ -100,12 +101,12 @@ public actor TrackSplitterEngine {
             log("⚠️  Cover fetch failed (continuing without cover): \(error.localizedDescription)")
         }
 
-        // 5. Split FLAC
+        // 5. Split audio
         log("✂️  Starting split with ffmpeg...")
         let splitTracks: [URL]
         do {
             splitTracks = try await splitter.split(
-                file: flacURL,
+                file: inputURL,
                 tracks: tracks,
                 to: outDir
             ) { [weak self] progress in
