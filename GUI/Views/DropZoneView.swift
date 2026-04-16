@@ -104,7 +104,9 @@ class DropZoneNSView: NSView {
     // MARK: - 拖放支持
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard hasValidAudioFile(sender) else { return [] }
+        guard hasValidAudioFile(sender) else {
+            return []
+        }
         isDragHighlighted = true
         return .copy
     }
@@ -135,6 +137,7 @@ class DropZoneNSView: NSView {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] else {
             return false
         }
+        let exts = urls.map { $0.pathExtension.lowercased() }
         return urls.contains { Self.supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 

@@ -55,8 +55,12 @@ public actor TrackSplitterEngine {
     }
 
     /// Process an audio file + CUE sheet and produce individual track files with metadata.
-    /// Supported input formats: FLAC, MP3, WAV, AIFF, ALAC, M4A, AAC, OGG, Opus.
-    public func process(inputURL: URL) async throws -> Result {
+    /// - Parameters:
+    ///   - inputURL: Source audio file
+    ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
+    ///     `.flac` = re-encode to FLAC (lossless, smaller file).
+    ///     `.wav` = re-encode to WAV (lossless PCM, larger file).
+    public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async throws -> Result {
         log("📂 Input: \(inputURL.lastPathComponent)")
 
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
@@ -70,12 +74,15 @@ public actor TrackSplitterEngine {
         log("🎵 Tracks: \(tracks.count) | Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
         log("📋 REM: date=\(cueRem.date ?? "—") genre=\(cueRem.genre ?? "—") comment=\(cueRem.comment ?? "—") composer=\(cueRem.composer ?? "—") discNumber=\(cueRem.discNumber ?? "—")")
 
-        // 2b. Validate FILE field if present
+        // 2b. Validate FILE field if present — use fuzzy match to handle encoding mismatches
         if let cf = cueFile {
             let cueDeclaredName = cf.resolvedURL.lastPathComponent
-            if cueDeclaredName != inputURL.lastPathComponent {
-                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(inputURL.lastPathComponent)\"")
+            let similarity = stringSimilarity(cueDeclaredName, inputURL.lastPathComponent)
+            if similarity < 0.80 {
+                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(inputURL.lastPathComponent)\" (similarity: \(String(format: "%.0f", similarity * 100))%)")
                 throw EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualAudioFile: inputURL.lastPathComponent)
+            } else {
+                log("📋 CUE FILE field similarity: \(String(format: "%.0f", similarity * 100))% — fuzzy-matched (encoding may differ)")
             }
         }
 
@@ -108,7 +115,8 @@ public actor TrackSplitterEngine {
             splitTracks = try await splitter.split(
                 file: inputURL,
                 tracks: tracks,
-                to: outDir
+                to: outDir,
+                outputFormat: outputFormat
             ) { [weak self] progress in
                 Task { await self?.log("  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)...") }
             }
@@ -150,7 +158,7 @@ public actor TrackSplitterEngine {
 
         return Result(outputDirectory: outDir, trackFiles: splitTracks,
                       albumTitle: albumTitle, performer: performer,
-                      coverEmbedded: coverData != nil,
+                      coverEmbedded: coverData != nil && !metadataResult.coverWasSkipped,
                       metadataResult: metadataResult)
     }
 }

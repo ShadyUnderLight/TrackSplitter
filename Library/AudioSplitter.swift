@@ -106,22 +106,49 @@ public actor AudioSplitter {
     }
 
     /// Split an audio file into tracks using ffmpeg.
-    /// The output format always matches the input format (passthrough encoding).
+    /// - Parameters:
+    ///   - inputURL: Source audio file
+    ///   - tracks: Cue track definitions
+    ///   - outputDir: Destination directory
+    ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
+    ///     Pass `.flac` to re-encode any input to FLAC (lossless, smaller file).
+    ///     Pass `.wav` to re-encode to WAV (lossless PCM, larger file).
     public func split(
         file inputURL: URL,
         tracks: [CueTrack],
         to outputDir: URL,
+        outputFormat: AudioFormat? = nil,
         progressHandler: @escaping @Sendable (Progress) -> Void
     ) async throws -> [URL] {
-        // Validate format is supported
-        let ext = inputURL.pathExtension.lowercased()
-        guard AudioFormat.fromExtension(ext) != nil else {
-            throw SplitError.unsupportedFormat(ext)
+        let inputExt = inputURL.pathExtension.lowercased()
+        guard AudioFormat.fromExtension(inputExt) != nil else {
+            throw SplitError.unsupportedFormat(inputExt)
+        }
+
+        // Determine output extension
+        let outExt: String
+        let acodecArg: [String]
+        if let fmt = outputFormat {
+            outExt = fmt.rawValue
+            switch fmt {
+            case .flac:
+                acodecArg = ["-acodec", "flac"]
+            case .wav:
+                acodecArg = ["-acodec", "pcm_s16le"]
+            case .mp3:
+                acodecArg = ["-acodec", "libmp3lame"]
+            case .alac:
+                acodecArg = ["-acodec", "alac"]
+            default:
+                acodecArg = ["-acodec", "copy"]
+            }
+        } else {
+            outExt = inputExt
+            acodecArg = ["-acodec", "copy"]
         }
 
         let totalDuration = try await getDuration(of: inputURL)
 
-        // Fill endSeconds for all tracks
         var filled = tracks
         for i in 0..<filled.count {
             if filled[i].endSeconds == nil {
@@ -134,15 +161,14 @@ public actor AudioSplitter {
         for track in filled {
             let duration = track.endSeconds! - track.startSeconds
             let safe = sanitizeFilename(track.title.isEmpty ? "Track_\(track.index)" : track.title)
-            let outURL = outputDir.appendingPathComponent("\(track.index). \(safe).\(ext)")
+            let outURL = outputDir.appendingPathComponent("\(track.index). \(safe).\(outExt)")
 
             let progress = Progress(track: track.index, total: filled.count,
                                     trackTitle: track.title, secondsProcessed: track.startSeconds)
             Task { @Sendable in progressHandler(progress) }
 
-            // Use -acodec copy (passthrough) to avoid re-encoding — works for most formats
             try await runFFmpeg(input: inputURL, start: track.startSeconds,
-                                duration: duration, output: outURL, format: ext)
+                                duration: duration, output: outURL, acodecArgs: acodecArg)
             outputs.append(outURL)
         }
 
@@ -150,22 +176,30 @@ public actor AudioSplitter {
     }
 
     private func runFFmpeg(input: URL, start: Double, duration: Double,
-                           output: URL, format: String) async throws {
-        // Try stream copy first (-acodec copy)
-        do {
-            try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                    output: output, extraArgs: ["-acodec", "copy"])
-        } catch {
-            // If stream copy fails (e.g., format doesn't support it), fall back to PCM WAV
-            // and rename to the target extension
-            try? FileManager.default.removeItem(at: output)
-            let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
-            try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                    output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"])
-            // Rename .wav to target format extension
-            if FileManager.default.fileExists(atPath: fallbackURL.path) {
-                try FileManager.default.moveItem(at: fallbackURL, to: output)
+                           output: URL, acodecArgs: [String]) async throws {
+        let isPassthrough = acodecArgs.first == "-acodec" && acodecArgs.last == "copy"
+
+        if isPassthrough {
+            // Try stream copy first (no re-encode)
+            do {
+                try await runFFmpegOnce(input: input, start: start, duration: duration,
+                                        output: output, extraArgs: acodecArgs)
+                return
+            } catch {
+                // Stream copy failed — fall back to PCM WAV, then rename
+                try? FileManager.default.removeItem(at: output)
+                let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
+                try await runFFmpegOnce(input: input, start: start, duration: duration,
+                                        output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"])
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    try FileManager.default.moveItem(at: fallbackURL, to: output)
+                }
+                return
             }
+        } else {
+            // Explicit codec requested (FLAC/WAV/MP3 etc.) — no stream copy fallback
+            try await runFFmpegOnce(input: input, start: start, duration: duration,
+                                    output: output, extraArgs: acodecArgs)
         }
     }
 

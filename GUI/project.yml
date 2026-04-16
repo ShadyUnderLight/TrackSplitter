@@ -24,6 +24,9 @@ targets:
       - path: ../Library
         type: group
         name: TrackSplitterLib
+    resources:
+      - path: ../Resources/embed_metadata.py
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tracksplitter.gui

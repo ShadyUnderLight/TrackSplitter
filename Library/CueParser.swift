@@ -153,36 +153,97 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
 }
 
 /// Find the .cue file corresponding to an audio URL.
-/// For FLAC files, tries filename-based lookup first; for all formats,
-/// falls back to scanning all .cue files and validating via the FILE field.
+/// Tries filename-based match first; falls back to scanning all .cue files
+/// and using fuzzy FILE-field matching (handles Chinese encoding mismatches).
 public func findCue(for audioURL: URL) -> URL? {
     let dir = audioURL.deletingLastPathComponent()
     let base = audioURL.deletingPathExtension().lastPathComponent
 
-    // Try filename-based match (works for FLAC when cue shares the same base name)
+    // Try filename-based match
     for ext in ["cue", "CUE", "Cue"] {
         let candidate = dir.appendingPathComponent(base).appendingPathExtension(ext)
         if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
     }
 
-    // Fallback: scan all .cue files in the directory and match via CUE FILE field
+    // Fallback: scan all .cue files and use fuzzy FILE-field matching
     guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else {
         return nil
     }
+    var bestCandidate: URL?
+    var bestScore: Double = 0
+
     for entry in entries {
         let ext = (entry as NSString).pathExtension.lowercased()
         if ext != "cue" { continue }
         let cueURL = dir.appendingPathComponent(entry)
-        // Validate by parsing the FILE field via the existing parseCue function
-        if let (tracks, _, _, cueFile, _) = try? parseCue(at: cueURL),
-           !tracks.isEmpty,
-           let cf = cueFile,
-           cf.resolvedURL.lastPathComponent == audioURL.lastPathComponent {
-            return cueURL
+        guard let (tracks, _, _, cueFile, _) = try? parseCue(at: cueURL),
+              !tracks.isEmpty,
+              let cf = cueFile else { continue }
+
+        let score = stringSimilarity(cf.resolvedURL.lastPathComponent,
+                                      audioURL.lastPathComponent)
+        if score > bestScore {
+            bestScore = score
+            bestCandidate = cueURL
         }
     }
 
+    // Require at least 80% similarity
+    if bestScore >= 0.80 {
+        return bestCandidate
+    }
+
+    // Fallback: return best candidate if nothing matches 80% but the base names do
+    if let best = bestCandidate,
+       bestScore >= 0.60,
+       cfBaseNameMatches(best, audioURL) {
+        return best
+    }
+
     return nil
+}
+
+/// Check if the CUE's FILE field base name (without extension) broadly matches the audio file.
+/// Allows through cases where encoding garbled only the Chinese characters.
+private func cfBaseNameMatches(_ cueURL: URL, _ audioURL: URL) -> Bool {
+    guard let (tracks, _, _, cueFile, _) = try? parseCue(at: cueURL),
+          !tracks.isEmpty,
+          let cf = cueFile else { return false }
+    let cueBase = cf.resolvedURL.deletingPathExtension().lastPathComponent
+    let audioBase = audioURL.deletingPathExtension().lastPathComponent
+    // Strip common Unicode-confusable chars and compare
+    let normalizedCue = cueBase.folding(options: .diacriticInsensitive, locale: .current)
+    let normalizedAudio = audioBase.folding(options: .diacriticInsensitive, locale: .current)
+    return stringSimilarity(normalizedCue, normalizedAudio) >= 0.60
+}
+
+/// Levenshtein-distance-based similarity ratio (0.0 – 1.0).
+func stringSimilarity(_ s1: String, _ s2: String) -> Double {
+    if s1 == s2 { return 1.0 }
+    let s1Arr = Array(s1)
+    let s2Arr = Array(s2)
+    let m = s1Arr.count
+    let n = s2Arr.count
+    if m == 0 || n == 0 { return 0.0 }
+
+    // Wagner-Fischer DP: O(mn) space → use two rows
+    var prev = Array(0...n)
+    var curr = [Int](repeating: 0, count: n + 1)
+
+    for i in 1...m {
+        curr[0] = i
+        for j in 1...n {
+            let cost = s1Arr[i-1] == s2Arr[j-1] ? 0 : 1
+            curr[j] = min(prev[j] + 1,        // deletion
+                          curr[j-1] + 1,       // insertion
+                          prev[j-1] + cost)     // substitution
+        }
+        swap(&prev, &curr)
+    }
+
+    let distance = prev[n]
+    let maxLen = max(m, n)
+    return 1.0 - (Double(distance) / Double(maxLen))
 }
 
 // MARK: - Private helpers

@@ -1,6 +1,29 @@
 import Foundation
 import Combine
 
+/// Output format selection for the split.
+public enum AudioSplitterOutputFormat: String, CaseIterable, Identifiable {
+    case keepOriginal = ""
+    case flac = "flac"
+    case wav = "wav"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .keepOriginal: return "保持原格式"
+        case .flac: return "FLAC"
+        case .wav: return "WAV"
+        }
+    }
+
+    /// Convert to AudioSplitter.AudioFormat for engine call, or nil for passthrough.
+    public var audioFormat: AudioSplitter.AudioFormat? {
+        guard self != .keepOriginal else { return nil }
+        return AudioSplitter.AudioFormat(rawValue: self.rawValue)
+    }
+}
+
 /// 负责协调界面与核心引擎的视图模型。
 /// 直接持有所有 @Published 状态，不通过中间 AppState，避免跨对象观察链失效。
 @MainActor
@@ -88,6 +111,8 @@ else:
     @Published var progress: Double = 0
     @Published var isShowingErrorAlert: Bool = false
     @Published var errorMessage: String = ""
+    /// Selected output format for the split. nil = same as input.
+    @Published var selectedOutputFormat: AudioSplitterOutputFormat = .keepOriginal
 
     // MARK: - Actions
     func load(audioURL: URL) {
@@ -146,7 +171,8 @@ else:
         Task {
             do {
                 let engine = TrackSplitterEngine(logHandler: handler)
-                let result = try await engine.process(inputURL: loaded.audioURL)
+                let result = try await engine.process(inputURL: loaded.audioURL,
+                                                      outputFormat: selectedOutputFormat.audioFormat)
                 let (coverData, _) = Completion.readCover(from: result.trackFiles)
                 let completion = Completion(
                     outputDirectory: result.outputDirectory,
