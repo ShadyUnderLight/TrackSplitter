@@ -60,13 +60,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             // 拖放区：始终显示，允许重新选择文件
             DropZoneView { fileURL in
-                viewModel.load(flacURL: fileURL)
+                viewModel.load(audioURL: fileURL)
             }
 
             if let loaded {
                 // 文件信息区
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("已加载：\(loaded.flacURL.lastPathComponent)")
+                    Text("已加载：\(loaded.audioURL.lastPathComponent)")
                         .font(.headline)
                     Text("CUE：\(loaded.cueURL.lastPathComponent)")
                         .font(.subheadline)

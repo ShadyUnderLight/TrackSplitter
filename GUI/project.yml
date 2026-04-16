@@ -24,6 +24,11 @@ targets:
       - path: ../Library
         type: group
         name: TrackSplitterLib
+    postBuildScripts:
+      - name: Copy embed_metadata.py
+        script: |
+          cp "${PROJECT_DIR}/../Resources/embed_metadata.py" "${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tracksplitter.gui

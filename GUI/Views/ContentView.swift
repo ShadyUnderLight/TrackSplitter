@@ -12,13 +12,15 @@ struct ContentView: View {
             switch viewModel.phase {
             case .idle:
                 IdleView(onFileSelected: { url in
-                    viewModel.load(flacURL: url)
+                    viewModel.selectedOutputFormat = .keepOriginal
+                    viewModel.load(audioURL: url)
                 })
 
             case .loaded(let loaded):
                 LoadedView(
                     loaded: loaded,
-                    onStart: { viewModel.startProcessing() }
+                    onStart: { viewModel.startProcessing() },
+                    selectedOutputFormat: $viewModel.selectedOutputFormat
                 )
 
             case .processing:
@@ -36,7 +38,10 @@ struct ContentView: View {
                             inFileViewerRootedAtPath: completion.outputDirectory.deletingLastPathComponent().path
                         )
                     },
-                    onProcessAnother: { viewModel.processAnother() }
+                    onProcessAnother: {
+                        viewModel.selectedOutputFormat = .keepOriginal
+                        viewModel.processAnother()
+                    }
                 )
 
             case .error(let message):
@@ -48,7 +53,7 @@ struct ContentView: View {
         .frame(minWidth: 640, minHeight: 480)
         .onReceive(NotificationCenter.default.publisher(for: .didSelectFlacFile)) { notification in
             if let url = notification.object as? URL {
-                viewModel.load(flacURL: url)
+                viewModel.load(audioURL: url)
             }
         }
     }
@@ -93,7 +98,7 @@ final class IdleViewController: NSViewController {
         container.addSubview(titleLabel)
 
         // 副标题。
-        let subtitleLabel = NSTextField(labelWithString: "将 FLAC 整轨专辑拆分为独立曲目")
+        let subtitleLabel = NSTextField(labelWithString: "将整轨音频拆分为独立曲目（FLAC/MP3/WAV/AIFF/M4A/AAC/OGG/Opus）")
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 14)
         subtitleLabel.textColor = .secondaryLabelColor
@@ -110,7 +115,7 @@ final class IdleViewController: NSViewController {
         container.addSubview(dropZone)
 
         // 选择按钮。
-        let selectButton = NSButton(title: "从磁盘选择 FLAC 文件", target: self, action: #selector(selectButtonClicked))
+        let selectButton = NSButton(title: "从磁盘选择音频文件", target: self, action: #selector(selectButtonClicked))
         selectButton.translatesAutoresizingMaskIntoConstraints = false
         selectButton.bezelStyle = .rounded
         selectButton.controlSize = .large
@@ -151,9 +156,18 @@ final class IdleViewController: NSViewController {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.init(filenameExtension: "flac") ?? .audio]
-        panel.title = "选择 FLAC 文件"
-        panel.message = "选择要拆分的 FLAC 整轨文件"
+        panel.allowedContentTypes = [
+            .init(filenameExtension: "flac") ?? .audio,
+            .init(filenameExtension: "mp3") ?? .audio,
+            .init(filenameExtension: "wav") ?? .audio,
+            .init(filenameExtension: "aiff") ?? .audio,
+            .init(filenameExtension: "m4a") ?? .audio,
+            .init(filenameExtension: "aac") ?? .audio,
+            .init(filenameExtension: "ogg") ?? .audio,
+            .init(filenameExtension: "opus") ?? .audio,
+        ]
+        panel.title = "选择音频文件"
+        panel.message = "选择要拆分的整轨音频文件"
         if panel.runModal() == .OK, let url = panel.url {
             onFileSelected?(url)
         }
@@ -202,14 +216,18 @@ final class DropZoneVisualView: NSView {
         return true
     }
 
+    private static let _supportedExtensions: Set<String> = [
+        "flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"
+    ]
+
     private func hasFlacFile(_ info: NSDraggingInfo) -> Bool {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return false }
-        return urls.contains { $0.pathExtension.lowercased() == "flac" }
+        return urls.contains { Self._supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 
     private func extractFlacUrl(_ info: NSDraggingInfo) -> URL? {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return nil }
-        return urls.first { $0.pathExtension.lowercased() == "flac" }
+        return urls.first { Self._supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -233,7 +251,7 @@ final class DropZoneVisualView: NSView {
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: isDragOver ? 1.0 : 0.6)
         }
 
-        let text = "拖放 FLAC 文件到这里"
+        let text = "拖放音频文件到这里"
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
         let attrs: [NSAttributedString.Key: Any] = [
@@ -265,6 +283,7 @@ struct IdleView: NSViewControllerRepresentable {
 struct LoadedView: View {
     let loaded: SplitterViewModel.LoadedFiles
     let onStart: () -> Void
+    @Binding var selectedOutputFormat: AudioSplitterOutputFormat
 
     var body: some View {
         VStack(spacing: 0) {
@@ -279,7 +298,7 @@ struct LoadedView: View {
                     Text(loaded.performer ?? "未知艺术家")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text(loaded.flacURL.lastPathComponent)
+                    Text(loaded.audioURL.lastPathComponent)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -311,6 +330,21 @@ struct LoadedView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                // Output format selector
+                HStack(spacing: 8) {
+                    Text("输出格式：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: $selectedOutputFormat) {
+                        ForEach(AudioSplitterOutputFormat.allCases) { fmt in
+                            Text(fmt.displayName).tag(fmt)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                }
 
                 Button(action: onStart) {
                     HStack(spacing: 6) {

@@ -21,8 +21,8 @@ final class AppState: ObservableObject {
 
     /// 已加载文件上下文。
     struct LoadedFiles {
-        /// 用户选择的 FLAC 文件。
-        let flacURL: URL
+        /// 用户选择的音频文件。
+        let audioURL: URL
         /// 自动匹配到的 CUE 文件。
         let cueURL: URL
         /// 解析出的曲目列表。

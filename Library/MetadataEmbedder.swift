@@ -26,6 +26,8 @@ public actor MetadataEmbedder {
         public let succeeded: Int
         public let failed: Int
         public let failures: [String]
+        /// True if any file had cover art skipped (e.g., WAV doesn't support embedded cover art).
+        public let coverWasSkipped: Bool
 
         public var isFullySuccessful: Bool { failed == 0 }
         public var isPartiallySuccessful: Bool { succeeded > 0 && failed > 0 }
@@ -122,10 +124,16 @@ public actor MetadataEmbedder {
         var succeeded = 0
         var failed = 0
         var failures: [String] = []
+        var coverWasSkipped = false
 
         for line in stdout.components(separatedBy: .newlines).filter({ !$0.isEmpty }) {
             if line.hasPrefix("DONE: ") {
                 succeeded += 1
+            } else if line.hasPrefix("SKIP: ") {
+                succeeded += 1
+                if line.contains("cover art skipped") {
+                    coverWasSkipped = true
+                }
             } else if line.hasPrefix("ERROR: ") {
                 failed += 1
                 failures.append(String(line.dropFirst(7)))
@@ -137,7 +145,8 @@ public actor MetadataEmbedder {
             failures = ["脚本执行失败（RC=\(rc)）：\(stderr.prefix(100))"]
         }
 
-        return EmbedResult(total: files.count, succeeded: succeeded, failed: failed, failures: failures)
+        return EmbedResult(total: files.count, succeeded: succeeded, failed: failed,
+                           failures: failures, coverWasSkipped: coverWasSkipped)
     }
 
     private func runScript(jsonFile: URL) async throws -> (stdout: String, stderr: String, rc: Int32) {

@@ -26,8 +26,22 @@ class DropZoneNSView: NSView {
         didSet { needsDisplay = true }
     }
 
-    /// FLAC 类型。
-    private let flacType = UTType(filenameExtension: "flac") ?? .data
+    /// 支持的音频格式列表。
+    private static let supportedExtensions: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
+
+    /// 支持的 UTType 列表。
+    private static var supportedTypes: [UTType] {
+        [
+            UTType(filenameExtension: "flac") ?? .data,
+            UTType(filenameExtension: "mp3") ?? .data,
+            UTType(filenameExtension: "wav") ?? .data,
+            UTType(filenameExtension: "aiff") ?? .data,
+            UTType(filenameExtension: "m4a") ?? .data,
+            UTType(filenameExtension: "aac") ?? .data,
+            UTType(filenameExtension: "ogg") ?? .data,
+            UTType(filenameExtension: "opus") ?? .data,
+        ]
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -44,7 +58,7 @@ class DropZoneNSView: NSView {
         registerForDraggedTypes([.fileURL])
 
         // 添加"选择文件"按钮。
-        let button = NSButton(title: "选择 FLAC 文件", target: self, action: #selector(openFilePicker))
+        let button = NSButton(title: "选择音频文件", target: self, action: #selector(openFilePicker))
         button.bezelStyle = .rounded
         button.controlSize = .large
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -65,9 +79,9 @@ class DropZoneNSView: NSView {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [flacType]
-        panel.title = "选择 FLAC 文件"
-        panel.message = "请选择要拆分的 FLAC 文件"
+        panel.allowedContentTypes = Self.supportedTypes
+        panel.title = "选择音频文件"
+        panel.message = "请选择要拆分的音频文件（FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus）"
 
         // 设置为 sheet 模式，避免阻塞主事件循环。
         if let window = self.window {
@@ -90,13 +104,15 @@ class DropZoneNSView: NSView {
     // MARK: - 拖放支持
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard hasValidFlacFile(sender) else { return [] }
+        guard hasValidAudioFile(sender) else {
+            return []
+        }
         isDragHighlighted = true
         return .copy
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        hasValidFlacFile(sender) ? .copy : []
+        hasValidAudioFile(sender) ? .copy : []
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -104,32 +120,33 @@ class DropZoneNSView: NSView {
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        hasValidFlacFile(sender)
+        hasValidAudioFile(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDragHighlighted = false
-        guard let fileURL = extractFlacFile(sender) else { return false }
+        guard let fileURL = extractAudioFile(sender) else { return false }
         fputs("[TrackSplitter] Dropped file: \(fileURL.path)\n", stderr)
         fflush(stderr)
         onFileSelected?(fileURL)
         return true
     }
 
-    /// 检查拖放数据中是否包含有效的 FLAC 文件。
-    private func hasValidFlacFile(_ info: NSDraggingInfo) -> Bool {
+    /// 检查拖放数据中是否包含有效的音频文件。
+    private func hasValidAudioFile(_ info: NSDraggingInfo) -> Bool {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] else {
             return false
         }
-        return urls.contains { $0.pathExtension.lowercased() == "flac" }
+        let exts = urls.map { $0.pathExtension.lowercased() }
+        return urls.contains { Self.supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 
-    /// 从拖放数据中提取 FLAC 文件 URL。
-    private func extractFlacFile(_ info: NSDraggingInfo) -> URL? {
+    /// 从拖放数据中提取音频文件 URL。
+    private func extractAudioFile(_ info: NSDraggingInfo) -> URL? {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] else {
             return nil
         }
-        return urls.filter { $0.pathExtension.lowercased() == "flac" }.first
+        return urls.first { Self.supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 
     // MARK: - 绘制
@@ -170,7 +187,7 @@ class DropZoneNSView: NSView {
             .paragraphStyle: paragraphStyle
         ]
         let textRect = NSRect(x: 0, y: bounds.midY - 40, width: bounds.width, height: 20)
-        "拖放 FLAC 文件到此处".draw(in: textRect, withAttributes: textAttrs)
+        "拖放音频文件到此处".draw(in: textRect, withAttributes: textAttrs)
     }
 }
 

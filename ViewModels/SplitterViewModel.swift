@@ -9,17 +9,17 @@ final class SplitterViewModel: ObservableObject {
     /// 全局应用状态。
     let appState = AppState()
 
-    /// 处理用户选择或拖入的 FLAC 文件。
-    func load(flacURL: URL) {
-        // 仅允许 .flac 扩展名，避免误处理其它音频格式。
-        guard flacURL.pathExtension.lowercased() == "flac" else {
-            appState.setError("仅支持 .flac 文件")
+    /// 处理用户选择或拖入的音频文件。
+    func load(audioURL: URL) {
+        let supported: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
+        guard supported.contains(audioURL.pathExtension.lowercased()) else {
+            appState.setError("不支持的文件格式。支持：FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus")
             return
         }
 
-        // 自动查找同名 CUE 文件。
-        guard let cueURL = findCue(for: flacURL) else {
-            appState.setError("未找到同名 CUE 文件：\(flacURL.deletingPathExtension().lastPathComponent).cue")
+        // 自动查找匹配的 CUE 文件。
+        guard let cueURL = findCue(for: audioURL) else {
+            appState.setError("未找到匹配的 CUE 文件（请确认 CUE 中 FILE 字段与音频文件名一致）")
             return
         }
 
@@ -28,7 +28,7 @@ final class SplitterViewModel: ObservableObject {
             let (tracks, albumTitle, performer, _, _) = try parseCue(at: cueURL)
             let previewTracks = fillPreviewEndTimes(for: tracks)
             let loaded = AppState.LoadedFiles(
-                flacURL: flacURL,
+                audioURL: audioURL,
                 cueURL: cueURL,
                 tracks: previewTracks,
                 albumTitle: albumTitle,
@@ -65,7 +65,7 @@ final class SplitterViewModel: ObservableObject {
         Task {
             do {
                 let engine = TrackSplitterEngine(logHandler: logHandler)
-                let result = try await engine.process(flacURL: loaded.flacURL)
+                let result = try await engine.process(inputURL: loaded.audioURL)
                 let completion = AppState.Completion(
                     outputDirectory: result.outputDirectory,
                     trackFiles: result.trackFiles,
