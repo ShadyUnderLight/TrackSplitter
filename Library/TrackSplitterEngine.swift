@@ -102,7 +102,7 @@ public actor TrackSplitterEngine {
         var coverData: Data? = nil
         do {
             log("🖼  Fetching album cover...")
-            coverData = try await fetcher.fetch(artist: performer, album: albumTitle ?? albumDirName)
+            coverData = try await fetcher.fetch(artist: performer, album: albumTitle ?? albumDirName, inputFile: inputURL)
             log("✅  Cover art: \(coverData.map { "\($0.count) bytes" } ?? "none")")
         } catch {
             log("⚠️  Cover fetch failed (continuing without cover): \(error.localizedDescription)")

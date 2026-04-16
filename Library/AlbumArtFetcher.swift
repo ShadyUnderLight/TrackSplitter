@@ -18,9 +18,18 @@ public actor AlbumArtFetcher {
     }
 
     /// Fetch album art as JPEG Data. Tries multiple sources in order.
+    /// Local files (same directory as input) are checked first for offline reliability.
     /// Returns on first successful fetch; throws `notFound` only if all sources fail.
-    public func fetch(artist: String?, album: String) async throws -> Data {
-        // Try each source; stop at first success
+    public func fetch(artist: String?, album: String, inputFile: URL? = nil) async throws -> Data {
+        // 1. Local file fallback (same directory as audio input) — pick the largest image
+        if let input = inputFile {
+            let dir = input.deletingLastPathComponent()
+            if let data = largestImage(in: dir) {
+                return data
+            }
+        }
+
+        // 2. Online sources
         let sources: [() async throws -> Data] = [
             { try await self.fetchFromLeftFM(album: album) },
             { try await self.fetchFromMusicBrainz(artist: artist, album: album) },
@@ -40,6 +49,38 @@ public actor AlbumArtFetcher {
         }
 
         throw lastError
+    }
+
+    private func isImageData(_ data: Data) -> Bool {
+        guard data.count >= 4 else { return false }
+        let header = data.prefix(4)
+        return header.starts(with: [0xFF, 0xD8, 0xFF]) ||
+               header.starts(with: [0x89, 0x50, 0x4E, 0x47])
+    }
+
+    /// Pick the largest image file from a directory — good heuristic for album art.
+    private func largestImage(in dir: URL) -> Data? {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else { return nil }
+
+        let imageExts = Set(["jpg", "jpeg", "png"])
+        var candidates: [(name: String, size: Int)] = []
+
+        for entry in entries {
+            let ext = (entry as NSString).pathExtension.lowercased()
+            guard imageExts.contains(ext) else { continue }
+            let fullURL = dir.appendingPathComponent(entry)
+            if let attrs = try? fm.attributesOfItem(atPath: fullURL.path),
+               let size = attrs[.size] as? Int, size > 5000 {
+                candidates.append((entry, size))
+            }
+        }
+
+        // Pick the largest (cover art is usually the biggest image)
+        if let best = candidates.max(by: { $0.size < $1.size }) {
+            return try? Data(contentsOf: dir.appendingPathComponent(best.name))
+        }
+        return nil
     }
 
     // MARK: - Source 1: leftfm.com (Chinese music album covers)

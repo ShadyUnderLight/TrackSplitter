@@ -6,14 +6,13 @@ import UniformTypeIdentifiers
 /// 主窗口视图：直接观察 SplitterViewModel，无需中间 AppState。
 struct ContentView: View {
     @StateObject private var viewModel = SplitterViewModel()
-    @State private var selectedOutputFormat = AudioSplitterOutputFormat.keepOriginal
 
     var body: some View {
         Group {
             switch viewModel.phase {
             case .idle:
                 IdleView(onFileSelected: { url in
-                    selectedOutputFormat = .keepOriginal
+                    viewModel.selectedOutputFormat = .keepOriginal
                     viewModel.load(audioURL: url)
                 })
 
@@ -21,7 +20,7 @@ struct ContentView: View {
                 LoadedView(
                     loaded: loaded,
                     onStart: { viewModel.startProcessing() },
-                    selectedOutputFormat: $selectedOutputFormat
+                    selectedOutputFormat: $viewModel.selectedOutputFormat
                 )
 
             case .processing:
@@ -40,7 +39,7 @@ struct ContentView: View {
                         )
                     },
                     onProcessAnother: {
-                        selectedOutputFormat = .keepOriginal
+                        viewModel.selectedOutputFormat = .keepOriginal
                         viewModel.processAnother()
                     }
                 )
@@ -99,7 +98,7 @@ final class IdleViewController: NSViewController {
         container.addSubview(titleLabel)
 
         // 副标题。
-        let subtitleLabel = NSTextField(labelWithString: "将 FLAC 整轨专辑拆分为独立曲目")
+        let subtitleLabel = NSTextField(labelWithString: "将整轨音频拆分为独立曲目（FLAC/MP3/WAV/AIFF/M4A/AAC/OGG/Opus）")
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 14)
         subtitleLabel.textColor = .secondaryLabelColor
