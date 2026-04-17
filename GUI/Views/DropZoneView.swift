@@ -26,21 +26,12 @@ class DropZoneNSView: NSView {
         didSet { needsDisplay = true }
     }
 
-    /// 支持的音频格式列表。
-    private static let supportedExtensions: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
+    /// 支持的音频格式列表（来自 SupportedAudioFormat）。
+    private static let supportedExtensions = SupportedAudioFormat.extensions
 
-    /// 支持的 UTType 列表。
+    /// 支持的 UTType 列表（来自 SupportedAudioFormat）。
     private static var supportedTypes: [UTType] {
-        [
-            UTType(filenameExtension: "flac") ?? .data,
-            UTType(filenameExtension: "mp3") ?? .data,
-            UTType(filenameExtension: "wav") ?? .data,
-            UTType(filenameExtension: "aiff") ?? .data,
-            UTType(filenameExtension: "m4a") ?? .data,
-            UTType(filenameExtension: "aac") ?? .data,
-            UTType(filenameExtension: "ogg") ?? .data,
-            UTType(filenameExtension: "opus") ?? .data,
-        ]
+        SupportedAudioFormat.utTypes
     }
 
     override init(frame frameRect: NSRect) {

@@ -21,6 +21,8 @@ targets:
         type: group
       - path: ViewModels
         type: group
+      - path: Models
+        type: group
       - path: ../Library
         type: group
         name: TrackSplitterLib
