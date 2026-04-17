@@ -53,23 +53,24 @@ struct TrackSplitterCLI {
         print("🎧 TrackSplitter v1.0.0\n")
 
         let semaphore = DispatchSemaphore(value: 0)
-        var runError: Error?
+        var runResult: Result<Void, Error> = .success(())
 
         Task {
             do {
                 let result = try await engine.process(inputURL: audioURL)
                 print("\n✅ Done! \(result.trackFiles.count) tracks saved to:")
                 print("   \(result.outputDirectory.path)")
+                runResult = .success(())
             } catch {
-                runError = error
                 print("\n❌ Error: \(error.localizedDescription)")
+                runResult = .failure(error)
             }
             semaphore.signal()
         }
 
         semaphore.wait()
 
-        if let err = runError {
+        if case .failure = runResult {
             exit(1)
         }
     }
