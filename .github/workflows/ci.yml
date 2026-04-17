@@ -17,11 +17,11 @@ jobs:
       - name: Check repository hygiene
         run: |
           echo "=== Checking for prohibited files ==="
-          # Check for .bak files
-          BAK_FILES=$(find . -name "*.bak" -not -path "./.git/*")
-          if [ -n "$BAK_FILES" ]; then
-            echo "ERROR: .bak files found:"
-            echo "$BAK_FILES"
+          # Check for .bak and .orig files
+          BACKUP_FILES=$(find . \( -name "*.bak" -o -name "*.orig" \) -not -path "./.git/*")
+          if [ -n "$BACKUP_FILES" ]; then
+            echo "ERROR: backup files found:"
+            echo "$BACKUP_FILES"
             exit 1
           fi
 
@@ -30,6 +30,14 @@ jobs:
           if [ -n "$DS_STORE" ]; then
             echo "ERROR: .DS_Store files found:"
             echo "$DS_STORE"
+            exit 1
+          fi
+
+          # Check for editor auto-backup files (e.g. vi ~ backups)
+          EDITOR_BACKUPS=$(find . -name "*~" -not -path "./.git/*")
+          if [ -n "$EDITOR_BACKUPS" ]; then
+            echo "ERROR: editor auto-backup files found:"
+            echo "$EDITOR_BACKUPS"
             exit 1
           fi
 
