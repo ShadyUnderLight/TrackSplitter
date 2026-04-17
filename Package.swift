@@ -42,6 +42,12 @@ let package = Package(
                 "Views/ResultView.swift",
                 "ViewModels/SplitterViewModel.swift",
             ]
+        ),
+        .testTarget(
+            name: "TrackSplitterTests",
+            dependencies: ["TrackSplitterLib"],
+            path: "Tests",
+            sources: ["AudioSplitterTests.swift"]
         )
     ]
 )

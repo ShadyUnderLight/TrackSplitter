@@ -54,9 +54,12 @@ public actor AudioSplitter {
     private let ffmpegPath: String
     private let ffprobePath: String
 
-    public init() {
-        self.ffmpegPath = Self.findBinary("ffmpeg") ?? "/usr/local/bin/ffmpeg"
-        self.ffprobePath = Self.findBinary("ffprobe") ?? "/usr/local/bin/ffprobe"
+    /// - Parameters:
+    ///   - ffmpegPath: Optional override for the ffmpeg binary path (useful for testing).
+    ///   - ffprobePath: Optional override for the ffprobe binary path (useful for testing).
+    public init(ffmpegPath: String? = nil, ffprobePath: String? = nil) {
+        self.ffmpegPath = ffmpegPath ?? Self.findBinary("ffmpeg") ?? "/usr/local/bin/ffmpeg"
+        self.ffprobePath = ffprobePath ?? Self.findBinary("ffprobe") ?? "/usr/local/bin/ffprobe"
     }
 
     private static func findBinary(_ name: String) -> String? {
@@ -167,16 +170,19 @@ public actor AudioSplitter {
                                     trackTitle: track.title, secondsProcessed: track.startSeconds)
             Task { @Sendable in progressHandler(progress) }
 
-            try await runFFmpeg(input: inputURL, start: track.startSeconds,
+            // runFFmpeg returns the actual URL written (may differ if passthrough fell back to WAV)
+            let actualURL = try await runFFmpeg(input: inputURL, start: track.startSeconds,
                                 duration: duration, output: outURL, acodecArgs: acodecArg)
-            outputs.append(outURL)
+            outputs.append(actualURL)
         }
 
         return outputs
     }
 
+    /// Runs ffmpeg and returns the actual URL that was written.
+    /// If passthrough fails, falls back to PCM WAV — extension stays .wav to match actual codec.
     private func runFFmpeg(input: URL, start: Double, duration: Double,
-                           output: URL, acodecArgs: [String]) async throws {
+                           output: URL, acodecArgs: [String]) async throws -> URL {
         let isPassthrough = acodecArgs.first == "-acodec" && acodecArgs.last == "copy"
 
         if isPassthrough {
@@ -184,22 +190,21 @@ public actor AudioSplitter {
             do {
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
                                         output: output, extraArgs: acodecArgs)
-                return
+                return output
             } catch {
-                // Stream copy failed — fall back to PCM WAV, then rename
+                // Stream copy failed — fall back to PCM WAV.
+                // Extension stays .wav to match actual codec; no rename back to original ext.
                 try? FileManager.default.removeItem(at: output)
                 let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
                                         output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"])
-                if FileManager.default.fileExists(atPath: fallbackURL.path) {
-                    try FileManager.default.moveItem(at: fallbackURL, to: output)
-                }
-                return
+                return fallbackURL
             }
         } else {
             // Explicit codec requested (FLAC/WAV/MP3 etc.) — no stream copy fallback
             try await runFFmpegOnce(input: input, start: start, duration: duration,
                                     output: output, extraArgs: acodecArgs)
+            return output
         }
     }
 
