@@ -1,3 +1,4 @@
+import TrackSplitterLib
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers

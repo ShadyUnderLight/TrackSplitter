@@ -1,3 +1,4 @@
+import TrackSplitterLib
 import Foundation
 
 /// 应用状态机与界面共享状态。
