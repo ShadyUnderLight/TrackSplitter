@@ -115,6 +115,9 @@ else:
     /// Selected output format for the split. nil = same as input.
     @Published var selectedOutputFormat: AudioSplitterOutputFormat = .keepOriginal
 
+    /// The currently running engine, if any. Used to support cancellation.
+    private var activeEngine: TrackSplitterEngine?
+
     // MARK: - Actions
     func load(audioURL: URL) {
         log("load() called: \(audioURL.path)")
@@ -173,6 +176,7 @@ else:
         Task {
             do {
                 let engine = TrackSplitterEngine(logHandler: handler)
+                self.activeEngine = engine
                 let result = try await engine.process(inputURL: loaded.audioURL,
                                                       outputFormat: selectedOutputFormat.audioFormat)
                 let (coverData, _) = Completion.readCover(from: result.trackFiles)
@@ -190,13 +194,20 @@ else:
                 await MainActor.run {
                     self.progress = 1
                     self.phase = .complete(completion)
+                    self.activeEngine = nil
                 }
             } catch {
                 await MainActor.run {
                     self.setError(error.localizedDescription)
+                    self.activeEngine = nil
                 }
             }
         }
+    }
+
+    /// Cancel the currently running split, if any.
+    func cancelProcessing() {
+        activeEngine?.cancel()
     }
 
     func processAnother() {
@@ -205,6 +216,7 @@ else:
         progress = 0
         isShowingErrorAlert = false
         errorMessage = ""
+        activeEngine = nil
     }
 
     // MARK: - Private

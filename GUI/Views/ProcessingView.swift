@@ -1,16 +1,26 @@
 import SwiftUI
 
-/// 处理中界面：展示进度与实时日志。
+/// 处理中界面：展示进度与实时日志，并提供取消按钮。
 struct ProcessingView: View {
     /// 当前进度（0...1）。
     let progress: Double
     /// 实时日志数据源。
     let logs: [String]
+    /// Called when the user taps "取消".
+    let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("正在拆分...")
-                .font(.title3.weight(.semibold))
+            HStack {
+                Text("正在拆分...")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Button("取消") {
+                    onCancel()
+                }
+                .buttonStyle(.bordered)
+                .foregroundStyle(.red)
+            }
 
             ProgressView(value: progress, total: 1)
                 .progressViewStyle(.linear)

@@ -53,13 +53,21 @@ public actor AudioSplitter {
 
     private let ffmpegPath: String
     private let ffprobePath: String
+    /// Subprocess timeout in seconds. nil = no timeout.
+    private let timeoutSeconds: Double?
 
     /// - Parameters:
     ///   - ffmpegPath: Optional override for the ffmpeg binary path (useful for testing).
     ///   - ffprobePath: Optional override for the ffprobe binary path (useful for testing).
-    public init(ffmpegPath: String? = nil, ffprobePath: String? = nil) {
+    ///   - timeoutSeconds: Optional subprocess timeout. Defaults to 300s (5 min) for ffmpeg/ffprobe.
+    public init(
+        ffmpegPath: String? = nil,
+        ffprobePath: String? = nil,
+        timeoutSeconds: Double? = 300
+    ) {
         self.ffmpegPath = ffmpegPath ?? Self.findBinary("ffmpeg") ?? "/usr/local/bin/ffmpeg"
         self.ffprobePath = ffprobePath ?? Self.findBinary("ffprobe") ?? "/usr/local/bin/ffprobe"
+        self.timeoutSeconds = timeoutSeconds
     }
 
     private static func findBinary(_ name: String) -> String? {
@@ -81,31 +89,16 @@ public actor AudioSplitter {
     }
 
     public func getDuration(of url: URL) async throws -> Double {
-        try await withCheckedThrowingContinuation { cont in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: ffprobePath)
-            process.arguments = [
-                "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1", url.path
-            ]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if let d = Double(output) {
-                    cont.resume(returning: d)
-                } else {
-                    cont.resume(throwing: SplitError.ffprobeFailed("Could not parse duration"))
-                }
-            } catch {
-                cont.resume(throwing: SplitError.ffprobeFailed(error.localizedDescription))
-            }
+        let runner = ProcessRunner(timeoutSeconds: timeoutSeconds)
+        let stdout = try await runner.run(executable: ffprobePath, arguments: [
+            "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", url.path
+        ])
+        let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let d = Double(trimmed) else {
+            throw SplitError.ffprobeFailed("Could not parse duration from: \(trimmed)")
         }
+        return d
     }
 
     /// Split an audio file into tracks using ffmpeg.
@@ -116,12 +109,16 @@ public actor AudioSplitter {
     ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
     ///     Pass `.flac` to re-encode any input to FLAC (lossless, smaller file).
     ///     Pass `.wav` to re-encode to WAV (lossless PCM, larger file).
+    ///   - progressHandler: Called on each track start with current progress.
+    ///   - isCancelled: Checked between tracks and during subprocess execution;
+    ///     return true to abort. Defaults to always false.
     public func split(
         file inputURL: URL,
         tracks: [CueTrack],
         to outputDir: URL,
         outputFormat: AudioFormat? = nil,
-        progressHandler: @escaping @Sendable (Progress) -> Void
+        progressHandler: @escaping @Sendable (Progress) -> Void,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
     ) async throws -> [URL] {
         let inputExt = inputURL.pathExtension.lowercased()
         guard AudioFormat.fromExtension(inputExt) != nil else {
@@ -162,6 +159,12 @@ public actor AudioSplitter {
         var outputs: [URL] = []
 
         for track in filled {
+            if isCancelled() {
+                // Clean up any partial outputs already written before bailing out
+                for url in outputs { try? FileManager.default.removeItem(at: url) }
+                throw SplitError.ffmpegFailed("Cancelled by user", -999)
+            }
+
             let duration = track.endSeconds! - track.startSeconds
             let safe = sanitizeFilename(track.title.isEmpty ? "Track_\(track.index)" : track.title)
             let outURL = outputDir.appendingPathComponent("\(track.index). \(safe).\(outExt)")
@@ -172,7 +175,10 @@ public actor AudioSplitter {
 
             // runFFmpeg returns the actual URL written (may differ if passthrough fell back to WAV)
             let actualURL = try await runFFmpeg(input: inputURL, start: track.startSeconds,
-                                duration: duration, output: outURL, acodecArgs: acodecArg)
+                                duration: duration, output: outURL, acodecArgs: acodecArg,
+                                isCancelled: isCancelled, onFailureCleanup: {
+                try? FileManager.default.removeItem(at: outURL)
+            })
             outputs.append(actualURL)
         }
 
@@ -181,61 +187,80 @@ public actor AudioSplitter {
 
     /// Runs ffmpeg and returns the actual URL that was written.
     /// If passthrough fails, falls back to PCM WAV — extension stays .wav to match actual codec.
-    private func runFFmpeg(input: URL, start: Double, duration: Double,
-                           output: URL, acodecArgs: [String]) async throws -> URL {
+    private func runFFmpeg(
+        input: URL,
+        start: Double,
+        duration: Double,
+        output: URL,
+        acodecArgs: [String],
+        isCancelled: @escaping @Sendable () -> Bool,
+        onFailureCleanup: @escaping @Sendable () -> Void
+    ) async throws -> URL {
         let isPassthrough = acodecArgs.first == "-acodec" && acodecArgs.last == "copy"
 
         if isPassthrough {
-            // Try stream copy first (no re-encode)
             do {
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                        output: output, extraArgs: acodecArgs)
+                                        output: output, extraArgs: acodecArgs,
+                                        isCancelled: isCancelled, onFailureCleanup: {})
                 return output
             } catch {
+                onFailureCleanup()
                 // Stream copy failed — fall back to PCM WAV.
                 // Extension stays .wav to match actual codec; no rename back to original ext.
-                try? FileManager.default.removeItem(at: output)
                 let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                        output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"])
+                                        output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"],
+                                        isCancelled: isCancelled, onFailureCleanup: {})
                 return fallbackURL
             }
         } else {
-            // Explicit codec requested (FLAC/WAV/MP3 etc.) — no stream copy fallback
-            try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                    output: output, extraArgs: acodecArgs)
-            return output
+            do {
+                try await runFFmpegOnce(input: input, start: start, duration: duration,
+                                        output: output, extraArgs: acodecArgs,
+                                        isCancelled: isCancelled, onFailureCleanup: {})
+                return output
+            } catch {
+                onFailureCleanup()
+                throw error
+            }
         }
     }
 
     /// Run ffmpeg once with given arguments; throws on failure.
-    private func runFFmpegOnce(input: URL, start: Double, duration: Double,
-                               output: URL, extraArgs: [String]) async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: ffmpegPath)
-            process.arguments = [
-                "-y", "-i", input.path,
-                "-ss", String(format: "%.3f", start),
-                "-t",  String(format: "%.3f", duration)
-            ] + extraArgs + [output.path]
-            let errPipe = Pipe()
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = errPipe
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
-                    cont.resume()
-                } else {
-                    let data = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let msg = String(data: data, encoding: .utf8).map { String($0.prefix(300)) } ?? "exit \(process.terminationStatus)"
-                    cont.resume(throwing: SplitError.ffmpegFailed(msg, process.terminationStatus))
-                }
-            } catch {
-                cont.resume(throwing: SplitError.ffmpegFailed(error.localizedDescription, -1))
+    /// Checks `isCancelled` during execution and applies `onFailureCleanup` on error.
+    private func runFFmpegOnce(
+        input: URL,
+        start: Double,
+        duration: Double,
+        output: URL,
+        extraArgs: [String],
+        isCancelled: @escaping @Sendable () -> Bool,
+        onFailureCleanup: @escaping @Sendable () -> Void
+    ) async throws {
+        let runner = ProcessRunner(timeoutSeconds: timeoutSeconds)
+        do {
+            let (stdout, stderr, rc) = try await runner.runCollecting(
+                executable: ffmpegPath,
+                arguments: [
+                    "-y", "-i", input.path,
+                    "-ss", String(format: "%.3f", start),
+                    "-t",  String(format: "%.3f", duration)
+                ] + extraArgs + [output.path],
+                isCancelled: isCancelled
+            )
+            if rc != 0 {
+                let msg = (stderr.isEmpty ? stdout : stderr).prefix(300)
+                throw SplitError.ffmpegFailed(String(msg), rc)
             }
+        } catch let error as ProcessRunnerError {
+            onFailureCleanup()
+            if case .cancelled = error { throw SplitError.ffmpegFailed("Cancelled", -999) }
+            if case .timeout(let secs, _) = error { throw SplitError.ffmpegFailed("Timed out after \(Int(secs))s", -1) }
+            throw error
+        } catch let error as SplitError {
+            onFailureCleanup()
+            throw error
         }
     }
 

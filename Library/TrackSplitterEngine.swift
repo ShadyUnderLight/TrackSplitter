@@ -8,6 +8,7 @@ public actor TrackSplitterEngine {
         case emptyTracks
         case outputDirCreationFailed
         case splittingFailed(String)
+        case splittingCancelled
         case metadataFailed(String)
         case cueFileMismatch(cueDeclaredFile: String, actualAudioFile: String)
 
@@ -17,6 +18,7 @@ public actor TrackSplitterEngine {
             case .emptyTracks: return "CUE file contains no tracks"
             case .outputDirCreationFailed: return "Failed to create output directory"
             case .splittingFailed(let msg): return "Splitting failed: \(msg)"
+            case .splittingCancelled: return "Splitting was cancelled"
             case .metadataFailed(let msg): return "Metadata embedding failed: \(msg)"
             case .cueFileMismatch(let cueDeclaredFile, let actualAudioFile):
                 return "CUE FILE field mismatch: CUE declares \"\(cueDeclaredFile)\" but input is \"\(actualAudioFile)\". Please ensure the FILE field in the CUE matches the actual audio file."
@@ -45,9 +47,22 @@ public actor TrackSplitterEngine {
     private let fetcher  = AlbumArtFetcher()
     private let embedder = MetadataEmbedder()
     private let logHandler: LogHandler?
+    /// NonisolatedUnsafe to allow cross-thread cancellation (e.g. MainActor cancel button).
+    private nonisolated(unsafe) var _isCancelled = false
 
     public init(logHandler: LogHandler? = nil) {
         self.logHandler = logHandler
+    }
+
+    /// Set the cancellation flag. Safe to call from any thread/task.
+    /// The engine will throw `splittingCancelled` at the next cancellation check point.
+    public nonisolated func cancel() {
+        _isCancelled = true
+    }
+
+    /// Returns true if `cancel()` has been called since the last `process()` call.
+    public func isCancelled() -> Bool {
+        return _isCancelled
     }
 
     private func log(_ msg: String) {
@@ -61,6 +76,7 @@ public actor TrackSplitterEngine {
     ///     `.flac` = re-encode to FLAC (lossless, smaller file).
     ///     `.wav` = re-encode to WAV (lossless PCM, larger file).
     public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async throws -> Result {
+        _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
 
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
@@ -129,8 +145,15 @@ public actor TrackSplitterEngine {
                 guard let self else { return }
                 let message = "  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)..."
                 Task { await self.log(message) }
+            } isCancelled: { [weak self] in
+                self?._isCancelled == true
             }
             log("✅  Split complete: \(splitTracks.count) files")
+        } catch let error as AudioSplitter.SplitError {
+            if error.localizedDescription.contains("Cancelled") {
+                throw EngineError.splittingCancelled
+            }
+            throw EngineError.splittingFailed(error.localizedDescription)
         } catch {
             throw EngineError.splittingFailed(error.localizedDescription)
         }
