@@ -11,3 +11,7 @@ __pycache__/
 *.icns
 *.iconset/
 GUI/project.yml
+
+# Editor and OS temporary files
+*.orig          # git merge conflict resolution backups
+*~              # vi/macOS TextEdit and other editor auto-backups
