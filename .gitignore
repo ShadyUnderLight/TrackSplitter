@@ -10,4 +10,4 @@ __pycache__/
 # XcodeGen artifacts (generated inside GUI/ — do not commit to repo root)
 *.icns
 *.iconset/
-*.yml
+GUI/project.yml

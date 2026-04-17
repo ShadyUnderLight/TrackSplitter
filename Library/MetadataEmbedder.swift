@@ -82,6 +82,13 @@ public actor MetadataEmbedder {
     /// Walk up from the executable's directory to find embed_metadata.py.
     /// Handles SPM development builds, release builds, and installed layouts.
     private static func locateScript() -> String {
+        // Primary: SwiftPM resource bundle (embed_metadata.py is in Library/Resources/)
+        if let bundleURL = Bundle.module.url(forResource: "embed_metadata", withExtension: "py"),
+           FileManager.default.isReadableFile(atPath: bundleURL.path) {
+            return bundleURL.path
+        }
+
+        // Fallback: relative-path search for development / installed layouts
         let exeDir = (CommandLine.arguments.first.map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
             ?? FileManager.default.currentDirectoryPath)
 
@@ -89,10 +96,13 @@ public actor MetadataEmbedder {
         let searchPaths: [URL] = [
             exeURL.appendingPathComponent("embed_metadata.py"),
             exeURL.appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("Library/Resources").appendingPathComponent("embed_metadata.py"),
             exeURL.appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("Library/Resources").appendingPathComponent("embed_metadata.py"),
             exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Library/Resources").appendingPathComponent("embed_metadata.py"),
             exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
-            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Resources").appendingPathComponent("embed_metadata.py"),
+            exeURL.appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("..").appendingPathComponent("Library/Resources").appendingPathComponent("embed_metadata.py"),
         ]
 
         for url in searchPaths {
