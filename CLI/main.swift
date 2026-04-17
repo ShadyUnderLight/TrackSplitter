@@ -100,6 +100,6 @@ struct TrackSplitterCLI {
 
     Requirements:
       • ffmpeg    (brew install ffmpeg)
-      • python3 + mutagen  (pip3 install mutagen --break-system-packages)
+      • python3 + mutagen  (python3 -m pip install mutagen; venv: python3 -m venv .venv && .venv/bin/pip install mutagen)
     """
 }

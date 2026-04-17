@@ -19,11 +19,18 @@ jobs:
           echo "build_num=$BUILD_NUM" >> $GITHUB_OUTPUT
         id: build_num
 
-      - name: Inject version into Info.plist
+      - name: Generate Xcode project
+        run: xcodegen generate --spec GUI/project.yml --project GUI/
+
+      - name: Inject version
         env:
           TS_BUILD_NUMBER: ${{ steps.build_num.outputs.build_num }}
+        run: Scripts/inject_version.sh
+
+      - name: Verify version
         run: |
-          Scripts/inject_version.sh
+          grep "currentVersion" Library/Version.swift | head -1
+          grep "buildNumber" Library/Version.swift | head -1
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" GUI/App/Info.plist
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" GUI/App/Info.plist
 
@@ -50,9 +57,9 @@ jobs:
         with:
           draft: true
           body: |
-            ## TrackSplitter ${{ steps.build_num.outputs.build_num }}
+            ## TrackSplitter ${{ github.ref_name }}
 
-            Built from tag `${{ github.ref_name }}`.
+            Built from tag `${{ github.ref_name }}`, build `${{ steps.build_num.outputs.build_num }}`.
 
             **Requirements:** macOS 13.0 or later
 

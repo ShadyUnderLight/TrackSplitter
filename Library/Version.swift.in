@@ -1,0 +1,27 @@
+// Version.swift — GENERATED FILE — Do not edit directly.
+// Regenerate:  TS_BUILD_NUMBER=<n>  ./Scripts/inject_version.sh
+// Source:       Library/Version.swift.in  (the file to edit before release)
+import Foundation
+
+/// Single source of truth for TrackSplitter version information.
+///
+/// To cut a release:
+///   1. Edit this file directly — set `currentVersion` to the new tag (e.g. "1.1.0").
+///   2. Reset `buildNumber` to 1 here as well.
+///   3. Commit, then run:  git tag -a v1.1.0 -m "Release v1.1.0" && git push --tags
+public enum Version {
+    /// Semantic version string — edit this value before each release.
+    public static let currentVersion = "1.0.0"
+
+    /// Build counter baked in at compile time (injected by inject_version.sh).
+    /// CI overrides via `TS_BUILD_NUMBER` env var.
+    public static let buildNumber = @BUILD@
+
+    /// Short git SHA baked in at compile time (injected by inject_version.sh).
+    public static let commitSHA = "@SHA@"
+
+    /// Formatted version string for CLI `--version` output.
+    public static var cliVersion: String {
+        "\(currentVersion) (build \(buildNumber))"
+    }
+}

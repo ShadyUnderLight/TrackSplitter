@@ -1,45 +1,52 @@
 #!/bin/bash
-# InjectVersion — reads version from Library/Version.swift and writes it into
-# GUI/App/Info.plist so that the GUI bundle always reflects the single source
-# of truth.
+# inject_version.sh — Generates Library/Version.swift from Version.swift.in and
+# injects version into GUI/App/Info.plist.
+#
+# Run before building on all platforms (local dev, CI, release).
+# Idempotent — safe to run multiple times.
 #
 # Usage:
-#   Scripts/inject_version.sh          # auto-detect version + build number
-#   TS_BUILD_NUMBER=42 Scripts/inject_version.sh   # override build number
-#
-# This script is idempotent — safe to run multiple times.
+#   ./Scripts/inject_version.sh               # auto-detect build number + SHA
+#   TS_BUILD_NUMBER=42 ./Scripts/inject_version.sh  # override build number
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-VERSION_FILE="$REPO_ROOT/Library/Version.swift"
-PLIST_FILE="$REPO_ROOT/GUI/App/Info.plist"
+TEMPLATE="$REPO_ROOT/Library/Version.swift.in"
+OUTPUT="$REPO_ROOT/Library/Version.swift"
+PLIST="$REPO_ROOT/GUI/App/Info.plist"
 
-if [[ ! -f "$VERSION_FILE" ]]; then
-    echo "error: Version.swift not found at $VERSION_FILE" >&2
-    exit 1
-fi
-if [[ ! -f "$PLIST_FILE" ]]; then
-    echo "error: Info.plist not found at $PLIST_FILE" >&2
+if [[ ! -f "$TEMPLATE" ]]; then
+    echo "error: Version.swift.in not found at $TEMPLATE" >&2
     exit 1
 fi
 
-# Extract currentVersion from Version.swift (e.g. 1.0.0)
-SEMVER=$(grep "currentVersion\s*=" "$VERSION_FILE" | sed 's/.*"\([^"]*\)".*/\1/')
+# --- Extract values ---
+# currentVersion is a plain string in the template (e.g. "1.0.0") — read it directly.
+SEMVER=$(grep "currentVersion\s*=" "$TEMPLATE" | sed 's/.*"\([^"]*\)".*/\1/')
 if [[ -z "$SEMVER" ]]; then
-    echo "error: could not parse currentVersion from $VERSION_FILE" >&2
+    echo "error: could not parse currentVersion from $TEMPLATE" >&2
     exit 1
 fi
 
-# Build number: use TS_BUILD_NUMBER env if set, otherwise git commit count
+# Build number: TS_BUILD_NUMBER env or git commit count
 if [[ -n "${TS_BUILD_NUMBER:-}" ]]; then
     BUILD_NUM="$TS_BUILD_NUMBER"
 else
     BUILD_NUM=$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo "1")
 fi
 
-PLIST_BUDDY="/usr/libexec/PlistBuddy"
+SHA=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-"$PLIST_BUDDY" -c "Set :CFBundleShortVersionString $SEMVER" "$PLIST_FILE"
-"$PLIST_BUDDY" -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST_FILE"
+# --- Generate Library/Version.swift ---
+sed \
+    -e "s/@BUILD@/$BUILD_NUM/g" \
+    -e "s/@SHA@/$SHA/g" \
+    "$TEMPLATE" > "$OUTPUT"
 
-echo "Version injected → CFBundleShortVersionString=$SEMVER, CFBundleVersion=$BUILD_NUM"
+# --- Inject into GUI Info.plist ---
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SEMVER" "$PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST"
+
+echo "Version injected → semver=$SEMVER, build=$BUILD_NUM, sha=$SHA"
+echo "  • Library/Version.swift  (generated from Version.swift.in)"
+echo "  • GUI/App/Info.plist     CFBundleShortVersionString=$SEMVER CFBundleVersion=$BUILD_NUM"

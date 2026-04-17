@@ -7,6 +7,9 @@
 *.pyc
 __pycache__/
 
+# Generated version file — regenerate with Scripts/inject_version.sh
+Library/Version.swift
+
 # XcodeGen artifacts (generated inside GUI/ — do not commit to repo root)
 *.icns
 *.iconset/
