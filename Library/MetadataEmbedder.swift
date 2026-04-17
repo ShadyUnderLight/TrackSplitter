@@ -31,6 +31,39 @@ public actor MetadataEmbedder {
 
         public var isFullySuccessful: Bool { failed == 0 }
         public var isPartiallySuccessful: Bool { succeeded > 0 && failed > 0 }
+
+        public init(total: Int, succeeded: Int, failed: Int, failures: [String], coverWasSkipped: Bool) {
+            self.total = total
+            self.succeeded = succeeded
+            self.failed = failed
+            self.failures = failures
+            self.coverWasSkipped = coverWasSkipped
+        }
+    }
+
+    /// Parses the stdout lines emitted by embed_metadata.py.
+    /// Exposed for unit testing — call this directly instead of duplicating the logic.
+    static func parseOutput(_ stdout: String) -> (succeeded: Int, failed: Int, failures: [String], coverWasSkipped: Bool) {
+        var succeeded = 0
+        var failed = 0
+        var failures: [String] = []
+        var coverWasSkipped = false
+
+        for line in stdout.components(separatedBy: .newlines).filter({ !$0.isEmpty }) {
+            if line.hasPrefix("DONE: ") {
+                succeeded += 1
+            } else if line.hasPrefix("SKIP: ") {
+                succeeded += 1
+                if line.contains("cover art skipped") {
+                    coverWasSkipped = true
+                }
+            } else if line.hasPrefix("ERROR: ") {
+                failed += 1
+                failures.append(String(line.dropFirst(7)))
+            }
+        }
+
+        return (succeeded, failed, failures, coverWasSkipped)
     }
 
     private let pythonPath: String
@@ -120,33 +153,25 @@ public actor MetadataEmbedder {
 
         let (stdout, stderr, rc) = try await runScript(jsonFile: tempFile)
 
-        // Parse per-file results from stdout
-        var succeeded = 0
-        var failed = 0
-        var failures: [String] = []
-        var coverWasSkipped = false
+        let parsed = Self.parseOutput(stdout)
 
-        for line in stdout.components(separatedBy: .newlines).filter({ !$0.isEmpty }) {
-            if line.hasPrefix("DONE: ") {
-                succeeded += 1
-            } else if line.hasPrefix("SKIP: ") {
-                succeeded += 1
-                if line.contains("cover art skipped") {
-                    coverWasSkipped = true
-                }
-            } else if line.hasPrefix("ERROR: ") {
-                failed += 1
-                failures.append(String(line.dropFirst(7)))
-            }
+        if rc != 0 && parsed.succeeded == 0 && parsed.failed == 0 {
+            return EmbedResult(
+                total: files.count,
+                succeeded: 0,
+                failed: files.count,
+                failures: ["脚本执行失败（RC=\(rc)）：\(stderr.prefix(100))"],
+                coverWasSkipped: parsed.coverWasSkipped
+            )
         }
 
-        if rc != 0 && succeeded == 0 && failed == 0 {
-            failed = files.count
-            failures = ["脚本执行失败（RC=\(rc)）：\(stderr.prefix(100))"]
-        }
-
-        return EmbedResult(total: files.count, succeeded: succeeded, failed: failed,
-                           failures: failures, coverWasSkipped: coverWasSkipped)
+        return EmbedResult(
+            total: files.count,
+            succeeded: parsed.succeeded,
+            failed: parsed.failed,
+            failures: parsed.failures,
+            coverWasSkipped: parsed.coverWasSkipped
+        )
     }
 
     private func runScript(jsonFile: URL) async throws -> (stdout: String, stderr: String, rc: Int32) {
