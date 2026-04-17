@@ -88,9 +88,17 @@ public actor TrackSplitterEngine {
 
         guard !tracks.isEmpty else { throw EngineError.emptyTracks }
 
-        // 3. Create output directory
-        let albumDirName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
-        let outDir = inputURL.deletingLastPathComponent().appendingPathComponent(albumDirName)
+        // 3. Create output directory (use sanitized name to avoid filesystem issues)
+        let albumDisplayName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
+        let albumSafeName = splitter.sanitizeDirectoryName(albumDisplayName)
+        let parentDir = inputURL.deletingLastPathComponent()
+        let outDir = splitter.resolveUniqueOutputDirectory(baseDir: parentDir, safeName: albumSafeName)
+
+        // Report actual directory used if it diverges from display name
+        if albumDisplayName != albumSafeName {
+            log("🗂  Album display name: \"\(albumDisplayName)\" → filesystem: \"\(outDir.lastPathComponent)\"")
+        }
+
         do {
             try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
@@ -102,7 +110,7 @@ public actor TrackSplitterEngine {
         var coverData: Data? = nil
         do {
             log("🖼  Fetching album cover...")
-            coverData = try await fetcher.fetch(artist: performer, album: albumTitle ?? albumDirName, inputFile: inputURL)
+            coverData = try await fetcher.fetch(artist: performer, album: albumTitle ?? albumDisplayName, inputFile: inputURL)
             log("✅  Cover art: \(coverData.map { "\($0.count) bytes" } ?? "none")")
         } catch {
             log("⚠️  Cover fetch failed (continuing without cover): \(error.localizedDescription)")
@@ -134,7 +142,7 @@ public actor TrackSplitterEngine {
             metadataResult = try await embedder.embedBatch(
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
                 artist: performer ?? "Unknown Artist",
-                album: albumTitle ?? albumDirName,
+                album: albumTitle ?? albumDisplayName,
                 year: cueRem.date ?? "",
                 genre: cueRem.genre ?? "",
                 comment: cueRem.comment,
