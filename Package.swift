@@ -52,6 +52,7 @@ let package = Package(
                 "AudioSplitterTests.swift",
                 "CueParserTests.swift",
                 "MetadataEmbedderResultTests.swift",
+                "AlbumArtFetcherTests.swift",
             ]
         )
     ]
