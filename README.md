@@ -55,14 +55,28 @@ TrackSplitter/
 ├── Package.swift              # Swift Package Manager 清单
 ├── CLI/
 │   └── main.swift             # 入口 + 参数解析
-├── Library/
+├── Library/                   # 核心库（CLI 和 GUI 共用）
+│   ├── AudioSplitter.swift    # ffmpeg 多格式拆分调度
 │   ├── CueParser.swift        # CUE 解析器（支持 Big5/UTF-8）
 │   ├── AlbumArtFetcher.swift  # 封面抓取（leftfm / MusicBrainz / iTunes）
-│   ├── FLACSplitter.swift     # ffmpeg 拆分调度
 │   ├── MetadataEmbedder.swift # Python/mutagen 桥接
 │   └── TrackSplitterEngine.swift  # 核心编排引擎
-└── Resources/
-    └── embed_metadata.py      # FLAC 元数据写入脚本
+├── GUI/                       # macOS GUI（唯一源码）
+│   ├── App/
+│   │   ├── main.swift         # 入口
+│   │   ├── TrackSplitterApp.swift
+│   │   └── AppState.swift
+│   ├── Views/
+│   │   ├── ContentView.swift   # ResultView is inline here
+│   │   ├── DropZoneView.swift
+│   │   ├── ProcessingView.swift
+│   │   └── TrackListView.swift
+│   └── ViewModels/
+│       └── SplitterViewModel.swift
+├── Resources/
+│   └── embed_metadata.py      # 元数据写入脚本
+└── Tests/
+    └── AudioSplitterTests.swift
 ```
 
 ## 技术细节

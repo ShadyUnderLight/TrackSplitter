@@ -1,3 +1,4 @@
+import TrackSplitterLib
 import SwiftUI
 
 /// 曲目预览列表组件。

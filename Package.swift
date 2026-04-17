@@ -33,14 +33,14 @@ let package = Package(
             dependencies: ["TrackSplitterLib"],
             path: ".",
             sources: [
-                "App/TrackSplitterApp.swift",
-                "App/AppState.swift",
-                "Views/ContentView.swift",
-                "Views/DropZoneView.swift",
-                "Views/TrackListView.swift",
-                "Views/ProcessingView.swift",
-                "Views/ResultView.swift",
-                "ViewModels/SplitterViewModel.swift",
+                "GUI/App/TrackSplitterApp.swift",
+                "GUI/App/AppState.swift",
+                "GUI/App/main.swift",
+                "GUI/Views/ContentView.swift",
+                "GUI/Views/DropZoneView.swift",
+                "GUI/Views/TrackListView.swift",
+                "GUI/Views/ProcessingView.swift",
+                "GUI/ViewModels/SplitterViewModel.swift",
             ]
         ),
         .testTarget(
