@@ -86,6 +86,11 @@ final class AudioSplitterTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func ffmpegPath() -> String? {
+        let candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
     private func ffprobePath() -> String {
         let candidates = ["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "/usr/bin/ffprobe"]
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "ffprobe"
@@ -122,8 +127,11 @@ final class AudioSplitterTests: XCTestCase {
     }
 
     private func createMinimalFLAC(at url: URL, durationSeconds: Double) throws {
+        guard let path = ffmpegPath() else {
+            throw XCTSkip("ffmpeg not found on this system")
+        }
         let ffmpeg = Process()
-        ffmpeg.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        ffmpeg.executableURL = URL(fileURLWithPath: path)
         ffmpeg.arguments = [
             "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
             "-t", String(durationSeconds), "-acodec", "flac", url.path
@@ -139,8 +147,11 @@ final class AudioSplitterTests: XCTestCase {
     }
 
     private func createMinimalMP3(at url: URL, durationSeconds: Double) throws {
+        guard let path = ffmpegPath() else {
+            throw XCTSkip("ffmpeg not found on this system")
+        }
         let ffmpeg = Process()
-        ffmpeg.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        ffmpeg.executableURL = URL(fileURLWithPath: path)
         ffmpeg.arguments = [
             "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
             "-t", String(durationSeconds), "-acodec", "libmp3lame", url.path
