@@ -16,7 +16,7 @@ public enum EnvironmentIssue: Sendable {
         case .pythonVersionTooOld(let version, let minimum):
             return "Python \(version) is too old. Please upgrade to Python \(minimum) or later."
         case .mutagenNotImportable:
-            return "Python package 'mutagen' is not installed. Run: python3 -m pip install mutagen --break-system-packages"
+            return "Python package 'mutagen' is not installed. Run: python3 -m pip install mutagen  # or use a venv: python3 -m venv ~/.tracksplitter-venv && ~/.tracksplitter-venv/bin/pip install mutagen"
         case .scriptNotFound:
             return "embed_metadata.py could not be located. This file should be bundled with the app. Please re-install TrackSplitter."
         }

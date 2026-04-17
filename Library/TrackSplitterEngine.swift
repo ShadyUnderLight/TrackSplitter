@@ -195,21 +195,6 @@ public actor TrackSplitterEngine {
         _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
 
-        // 0. Pre-flight environment check — fail fast before any file operations
-        let envReport = await embedder.checkEnvironment()
-        if !envReport.isHealthy {
-            let issues = envReport.issues
-            let firstIssue = issues.first!
-            log("❌ Environment check failed: \(firstIssue.summary)")
-            for issue in issues {
-                log("   → \(issue.remediation)")
-            }
-            return .failure(message: "Environment check failed: \(firstIssue.summary)")
-        }
-        if let ver = envReport.pythonVersion {
-            log("🐍 Python \(ver) + mutagen OK | script: \(envReport.scriptPath ?? "unknown")")
-        }
-
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
         guard let cueURL = findCue(for: inputURL) else {
             return .failure(message: EngineError.noCueFile(inputURL).localizedDescription)
@@ -241,6 +226,21 @@ public actor TrackSplitterEngine {
 
         guard !tracks.isEmpty else {
             return .failure(message: EngineError.emptyTracks.localizedDescription)
+        }
+
+        // 2. Pre-flight environment check — after input validation, before any file system operations
+        let envReport = await embedder.checkEnvironment()
+        if !envReport.isHealthy {
+            let issues = envReport.issues
+            let firstIssue = issues.first!
+            log("❌ Environment check failed: \(firstIssue.summary)")
+            for issue in issues {
+                log("   → \(issue.remediation)")
+            }
+            return .failure(message: "Environment check failed: \(firstIssue.summary)")
+        }
+        if let ver = envReport.pythonVersion {
+            log("🐍 Python \(ver) + mutagen OK | script: \(envReport.scriptPath ?? "unknown")")
         }
 
         // 3. Create output directory (use sanitized name to avoid filesystem issues)
