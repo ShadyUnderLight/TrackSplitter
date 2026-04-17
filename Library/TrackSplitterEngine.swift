@@ -9,7 +9,6 @@ public actor TrackSplitterEngine {
         case outputDirCreationFailed
         case splittingFailed(String)
         case splittingCancelled
-        case metadataFailed(String)
         case cueFileMismatch(cueDeclaredFile: String, actualAudioFile: String)
 
         public var errorDescription: String? {
@@ -19,14 +18,61 @@ public actor TrackSplitterEngine {
             case .outputDirCreationFailed: return "Failed to create output directory"
             case .splittingFailed(let msg): return "Splitting failed: \(msg)"
             case .splittingCancelled: return "Splitting was cancelled"
-            case .metadataFailed(let msg): return "Metadata embedding failed: \(msg)"
             case .cueFileMismatch(let cueDeclaredFile, let actualAudioFile):
                 return "CUE FILE field mismatch: CUE declares \"\(cueDeclaredFile)\" but input is \"\(actualAudioFile)\". Please ensure the FILE field in the CUE matches the actual audio file."
             }
         }
     }
 
-    public struct Result: Sendable {
+    /// Explicit outcome model for the entire process.
+    /// Distinguishes complete success, partial success (split succeeded but metadata partially/fully failed),
+    /// and complete failure (nothing usable was produced).
+    public enum EngineOutcome: Sendable {
+        public enum Status: String, Sendable {
+            case success          /// Split and metadata all succeeded.
+            case partialSuccess   /// Split succeeded; metadata partially or fully failed; usable files exist on disk.
+            case failure          /// Nothing usable was produced (pre-split failure, or split itself failed).
+        }
+
+        case success(Output)
+        case partialSuccess(Output, metadataFailures: [String])
+        case failure(message: String)
+
+        public var status: Status {
+            switch self {
+            case .success:        return .success
+            case .partialSuccess: return .partialSuccess
+            case .failure:        return .failure
+            }
+        }
+
+        /// The output directory and file list, if any split files exist.
+        public var output: Output? {
+            switch self {
+            case .success(let o):              return o
+            case .partialSuccess(let o, _):     return o
+            case .failure:                     return nil
+            }
+        }
+
+        /// Human-readable summary message.
+        public var summary: String {
+            switch self {
+            case .success(let o):
+                return "成功：\(o.trackFiles.count) 个曲目已输出到 \(o.outputDirectory.lastPathComponent)"
+            case .partialSuccess(let o, let metaFails):
+                let metaMsg = metaFails.isEmpty
+                    ? "元数据写入全部失败"
+                    : "元数据写入失败：\(metaFails.count) 个曲目"
+                return "部分成功：\(o.trackFiles.count) 个音频文件已输出（\(metaMsg)）"
+            case .failure(let msg):
+                return "失败：\(msg)"
+            }
+        }
+    }
+
+    /// The substantive output of a process run — always tied to at least one track file existing.
+    public struct Output: Sendable {
         public let outputDirectory: URL
         public let trackFiles: [URL]
         public let albumTitle: String?
@@ -35,6 +81,50 @@ public actor TrackSplitterEngine {
         public let coverEmbedded: Bool
         /// Per-track metadata embedding result.
         public let metadataResult: MetadataEmbedder.EmbedResult
+
+        public init(outputDirectory: URL, trackFiles: [URL], albumTitle: String?, performer: String?,
+                    coverEmbedded: Bool, metadataResult: MetadataEmbedder.EmbedResult) {
+            self.outputDirectory = outputDirectory
+            self.trackFiles = trackFiles
+            self.albumTitle = albumTitle
+            self.performer = performer
+            self.coverEmbedded = coverEmbedded
+            self.metadataResult = metadataResult
+        }
+    }
+
+    /// Legacy result struct — retained for API compatibility with existing callers.
+    /// Internally `process()` now returns `EngineOutcome`; this is constructed from `outcome.output`.
+    public struct Result: Sendable {
+        public let outputDirectory: URL
+        public let trackFiles: [URL]
+        public let albumTitle: String?
+        public let performer: String?
+        public let coverEmbedded: Bool
+        public let metadataResult: MetadataEmbedder.EmbedResult
+
+        public init(outputDirectory: URL, trackFiles: [URL], albumTitle: String?, performer: String?,
+                    coverEmbedded: Bool, metadataResult: MetadataEmbedder.EmbedResult) {
+            self.outputDirectory = outputDirectory
+            self.trackFiles = trackFiles
+            self.albumTitle = albumTitle
+            self.performer = performer
+            self.coverEmbedded = coverEmbedded
+            self.metadataResult = metadataResult
+        }
+
+        @available(*, deprecated, message: "Use process() → EngineOutcome instead")
+        public init(from outcome: EngineOutcome) throws {
+            guard let out = outcome.output else {
+                throw EngineError.splittingFailed("No output produced")
+            }
+            self.outputDirectory = out.outputDirectory
+            self.trackFiles = out.trackFiles
+            self.albumTitle = out.albumTitle
+            self.performer = out.performer
+            self.coverEmbedded = out.coverEmbedded
+            self.metadataResult = out.metadataResult
+        }
     }
 
     public struct LogHandler: @unchecked Sendable {
@@ -49,6 +139,8 @@ public actor TrackSplitterEngine {
     private let logHandler: LogHandler?
     /// NonisolatedUnsafe to allow cross-thread cancellation (e.g. MainActor cancel button).
     private nonisolated(unsafe) var _isCancelled = false
+    /// Holds the output of the most recent `process()` call, so `cleanup()` knows what to delete.
+    private var _lastOutput: Output?
 
     public init(logHandler: LogHandler? = nil) {
         self.logHandler = logHandler
@@ -69,24 +161,53 @@ public actor TrackSplitterEngine {
         logHandler?.log(msg)
     }
 
+    /// Delete the output files and directory from the last `process()` run.
+    /// Call this when the caller chooses not to keep a partial-success result.
+    public func cleanup() {
+        guard let out = _lastOutput else { return }
+        Self.cleanup(output: out)
+        _lastOutput = nil
+    }
+
+    /// Delete the given output's track files and output directory.
+    /// Exposed as a static method so callers who already hold an `Output` can clean up
+    /// without going through the engine instance.
+    public static func cleanup(output: Output) {
+        for file in output.trackFiles {
+            try? FileManager.default.removeItem(at: file)
+        }
+        try? FileManager.default.removeItem(at: output.outputDirectory)
+    }
+
     /// Process an audio file + CUE sheet and produce individual track files with metadata.
+    ///
+    /// Returns `EngineOutcome` — use `.status` to distinguish:
+    /// - `.success`: everything worked
+    /// - `.partialSuccess`: split files exist, metadata partially/fully failed — caller decides whether to `cleanup()`
+    /// - `.failure`: nothing usable was produced (pre-split error, or split itself failed)
+    ///
     /// - Parameters:
     ///   - inputURL: Source audio file
     ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
     ///     `.flac` = re-encode to FLAC (lossless, smaller file).
     ///     `.wav` = re-encode to WAV (lossless PCM, larger file).
-    public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async throws -> Result {
+    public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async -> EngineOutcome {
         _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
 
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
         guard let cueURL = findCue(for: inputURL) else {
-            throw EngineError.noCueFile(inputURL)
+            return .failure(message: EngineError.noCueFile(inputURL).localizedDescription)
         }
         log("📋 CUE found: \(cueURL.lastPathComponent)")
 
         // 2. Parse CUE (handles Chinese encodings via Big5/CP950 detection)
-        let (tracks, albumTitle, performer, cueFile, cueRem) = try parseCue(at: cueURL)
+        let (tracks, albumTitle, performer, cueFile, cueRem): ([CueTrack], String?, String?, CueFile?, CueRem)
+        do {
+            (tracks, albumTitle, performer, cueFile, cueRem) = try parseCue(at: cueURL)
+        } catch {
+            return .failure(message: "CUE parse error: \(error.localizedDescription)")
+        }
         log("🎵 Tracks: \(tracks.count) | Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
         log("📋 REM: date=\(cueRem.date ?? "—") genre=\(cueRem.genre ?? "—") comment=\(cueRem.comment ?? "—") composer=\(cueRem.composer ?? "—") discNumber=\(cueRem.discNumber ?? "—")")
 
@@ -95,14 +216,17 @@ public actor TrackSplitterEngine {
             let cueDeclaredName = cf.resolvedURL.lastPathComponent
             let similarity = stringSimilarity(cueDeclaredName, inputURL.lastPathComponent)
             if similarity < 0.80 {
-                log("⚠️  CUE FILE mismatch — CUE: \"\(cf.path)\", actual: \"\(inputURL.lastPathComponent)\" (similarity: \(String(format: "%.0f", similarity * 100))%)")
-                throw EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualAudioFile: inputURL.lastPathComponent)
+                let msg = EngineError.cueFileMismatch(cueDeclaredFile: cf.path, actualAudioFile: inputURL.lastPathComponent).localizedDescription
+                log("⚠️  \(msg)")
+                return .failure(message: msg)
             } else {
                 log("📋 CUE FILE field similarity: \(String(format: "%.0f", similarity * 100))% — fuzzy-matched (encoding may differ)")
             }
         }
 
-        guard !tracks.isEmpty else { throw EngineError.emptyTracks }
+        guard !tracks.isEmpty else {
+            return .failure(message: EngineError.emptyTracks.localizedDescription)
+        }
 
         // 3. Create output directory (use sanitized name to avoid filesystem issues)
         let albumDisplayName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
@@ -110,7 +234,6 @@ public actor TrackSplitterEngine {
         let parentDir = inputURL.deletingLastPathComponent()
         let outDir = splitter.resolveUniqueOutputDirectory(baseDir: parentDir, safeName: albumSafeName)
 
-        // Report actual directory used if it diverges from display name
         if albumDisplayName != albumSafeName {
             log("🗂  Album display name: \"\(albumDisplayName)\" → filesystem: \"\(outDir.lastPathComponent)\"")
         }
@@ -118,7 +241,7 @@ public actor TrackSplitterEngine {
         do {
             try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
-            throw EngineError.outputDirCreationFailed
+            return .failure(message: EngineError.outputDirCreationFailed.localizedDescription)
         }
         log("📁 Output dir: \(outDir.path)")
 
@@ -132,9 +255,9 @@ public actor TrackSplitterEngine {
             log("⚠️  Cover fetch failed (continuing without cover): \(error.localizedDescription)")
         }
 
-        // 5. Split audio
+        // 5. Split audio — split failure is always fatal (nothing on disk)
         log("✂️  Starting split with ffmpeg...")
-        let splitTracks: [URL]
+        var splitTracks: [URL] = []
         do {
             splitTracks = try await splitter.split(
                 file: inputURL,
@@ -150,17 +273,21 @@ public actor TrackSplitterEngine {
             }
             log("✅  Split complete: \(splitTracks.count) files")
         } catch let error as AudioSplitter.SplitError {
-            if error.localizedDescription.contains("Cancelled") {
-                throw EngineError.splittingCancelled
-            }
-            throw EngineError.splittingFailed(error.localizedDescription)
+            let msg = error.localizedDescription.contains("Cancelled")
+                ? EngineError.splittingCancelled.localizedDescription
+                : EngineError.splittingFailed(error.localizedDescription).localizedDescription
+            for file in splitTracks { try? FileManager.default.removeItem(at: file) }
+            try? FileManager.default.removeItem(at: outDir)
+            return .failure(message: msg)
         } catch {
-            throw EngineError.splittingFailed(error.localizedDescription)
+            for file in splitTracks { try? FileManager.default.removeItem(at: file) }
+            try? FileManager.default.removeItem(at: outDir)
+            return .failure(message: EngineError.splittingFailed(error.localizedDescription).localizedDescription)
         }
 
-        // 6. Embed metadata (fatal on failure)
-        let metadataResult: MetadataEmbedder.EmbedResult
+        // 6. Embed metadata — partial metadata failure is now partialSuccess, not fatal
         log("🏷  Embedding metadata...")
+        let metadataResult: MetadataEmbedder.EmbedResult
         do {
             metadataResult = try await embedder.embedBatch(
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
@@ -174,24 +301,40 @@ public actor TrackSplitterEngine {
                 totalTracks: tracks.count,
                 coverData: coverData
             )
-            if metadataResult.isFullySuccessful {
-                log("✅  Metadata embedded for all \(metadataResult.succeeded) tracks")
-            } else if metadataResult.isPartiallySuccessful {
-                log("⚠️  Metadata partially embedded: \(metadataResult.succeeded)/\(metadataResult.total) succeeded, \(metadataResult.failed) failed")
-            } else {
-                log("❌  Metadata embedding failed for all \(metadataResult.failed) tracks")
-                throw EngineError.metadataFailed(
-                    metadataResult.failures.joined(separator: "; ")
-                )
-            }
         } catch {
-            log("❌  Metadata embedding failed: \(error.localizedDescription)")
-            throw EngineError.metadataFailed(error.localizedDescription)
+            // Metadata script crashed — treat as partial success with no metadata written
+            log("⚠️  Metadata embedding threw (treating as partial success): \(error.localizedDescription)")
+            metadataResult = MetadataEmbedder.EmbedResult(
+                total: splitTracks.count,
+                succeeded: 0,
+                failed: splitTracks.count,
+                failures: [error.localizedDescription],
+                coverWasSkipped: false
+            )
         }
 
-        return Result(outputDirectory: outDir, trackFiles: splitTracks,
-                      albumTitle: albumTitle, performer: performer,
-                      coverEmbedded: coverData != nil && !metadataResult.coverWasSkipped,
-                      metadataResult: metadataResult)
+        if metadataResult.isFullySuccessful {
+            log("✅  Metadata embedded for all \(metadataResult.succeeded) tracks")
+        } else if metadataResult.isPartiallySuccessful {
+            log("⚠️  Metadata partially embedded: \(metadataResult.succeeded)/\(metadataResult.total) succeeded, \(metadataResult.failed) failed")
+        } else {
+            log("⚠️  Metadata embedding failed for all \(metadataResult.failed) tracks — returning partialSuccess with split files intact")
+        }
+
+        let output = Output(
+            outputDirectory: outDir,
+            trackFiles: splitTracks,
+            albumTitle: albumTitle,
+            performer: performer,
+            coverEmbedded: coverData != nil && !metadataResult.coverWasSkipped,
+            metadataResult: metadataResult
+        )
+        _lastOutput = output
+
+        if metadataResult.isFullySuccessful {
+            return .success(output)
+        } else {
+            return .partialSuccess(output, metadataFailures: metadataResult.failures)
+        }
     }
 }

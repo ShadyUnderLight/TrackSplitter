@@ -52,21 +52,30 @@ struct TrackSplitterCLI {
 
         print("🎧 TrackSplitter v1.0.0\n")
 
-        do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                Task {
-                    do {
-                        let r = try await engine.process(inputURL: audioURL)
-                        print("\n✅ Done! \(r.trackFiles.count) tracks saved to:")
-                        print("   \(r.outputDirectory.path)")
-                        continuation.resume()
-                    } catch {
-                        print("\n❌ Error: \(error.localizedDescription)")
-                        continuation.resume(throwing: error)
-                    }
+        let outcome = await engine.process(inputURL: audioURL)
+        switch outcome.status {
+        case .success:
+            guard let output = outcome.output else {
+                print("\n❌ Internal error: no output")
+                exit(1)
+            }
+            print("\n✅ Done! \(output.trackFiles.count) tracks saved to:")
+            print("   \(output.outputDirectory.path)")
+        case .partialSuccess:
+            guard let output = outcome.output else {
+                print("\n❌ Internal error: no output")
+                exit(1)
+            }
+            print("\n⚠️  Partial success — \(output.trackFiles.count) audio files saved to:")
+            print("   \(output.outputDirectory.path)")
+            if !output.metadataResult.failures.isEmpty {
+                print("   Metadata failed for \(output.metadataResult.failed) track(s):")
+                for f in output.metadataResult.failures.prefix(5) {
+                    print("     • \(f)")
                 }
             }
-        } catch {
+        case .failure:
+            print("\n❌ \(outcome.summary)")
             exit(1)
         }
     }
