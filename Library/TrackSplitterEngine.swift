@@ -118,7 +118,9 @@ public actor TrackSplitterEngine {
                 to: outDir,
                 outputFormat: outputFormat
             ) { [weak self] progress in
-                Task { await self?.log("  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)...") }
+                guard let self else { return }
+                let message = "  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)..."
+                Task { await self.log(message) }
             }
             log("✅  Split complete: \(splitTracks.count) files")
         } catch {
