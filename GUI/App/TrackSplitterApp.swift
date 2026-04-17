@@ -90,16 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [
-            .init(filenameExtension: "flac") ?? .audio,
-            .init(filenameExtension: "mp3") ?? .audio,
-            .init(filenameExtension: "wav") ?? .audio,
-            .init(filenameExtension: "aiff") ?? .audio,
-            .init(filenameExtension: "m4a") ?? .audio,
-            .init(filenameExtension: "aac") ?? .audio,
-            .init(filenameExtension: "ogg") ?? .audio,
-            .init(filenameExtension: "opus") ?? .audio,
-        ]
+        panel.allowedContentTypes = SupportedAudioFormat.utTypes
         panel.title = "选择音频文件"
         panel.message = "选择要拆分的整轨音频文件"
 

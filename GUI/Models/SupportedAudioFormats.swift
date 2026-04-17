@@ -5,8 +5,8 @@ import UniformTypeIdentifiers
 /// Single source of truth — all GUI code paths (drag/drop, file panel, engine load)
 /// reference this constant to stay in sync.
 enum SupportedAudioFormat {
-    /// All supported input file extensions (lowercase, no dot).
-    static let extensions: Set<String> = [
+    /// All supported input file extensions (lowercase, no dot), in canonical order.
+    static let extensions: [String] = [
         "flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"
     ]
 

@@ -128,7 +128,6 @@ class DropZoneNSView: NSView {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] else {
             return false
         }
-        let exts = urls.map { $0.pathExtension.lowercased() }
         return urls.contains { Self.supportedExtensions.contains($0.pathExtension.lowercased()) }
     }
 
