@@ -68,10 +68,12 @@ public actor MetadataEmbedder {
 
     private let pythonPath: String
     private let scriptPath: String
+    private let timeoutSeconds: Double?
 
-    public init() {
+    public init(timeoutSeconds: Double? = 60) {
         self.pythonPath = Self.findPython()
         self.scriptPath = Self.locateScript()
+        self.timeoutSeconds = timeoutSeconds
     }
 
     private static func findPython() -> String {
@@ -185,29 +187,20 @@ public actor MetadataEmbedder {
     }
 
     private func runScript(jsonFile: URL) async throws -> (stdout: String, stderr: String, rc: Int32) {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(String, String, Int32), Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: pythonPath)
-            process.arguments = [scriptPath, jsonFile.path]
-
-            let outPipe = Pipe()
-            let errPipe = Pipe()
-            process.standardOutput = outPipe
-            process.standardError = errPipe
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-
-                let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                let stdout = String(data: outData, encoding: .utf8) ?? ""
-                let stderr = String(data: errData, encoding: .utf8) ?? ""
-
-                cont.resume(returning: (stdout, stderr, process.terminationStatus))
-            } catch {
-                cont.resume(throwing: error)
+        let runner = ProcessRunner(timeoutSeconds: timeoutSeconds)
+        do {
+            let (stdout, stderr, rc) = try await runner.runCollecting(
+                executable: pythonPath,
+                arguments: [scriptPath, jsonFile.path]
+            )
+            return (stdout, stderr, rc)
+        } catch let error as ProcessRunnerError {
+            if case .timeout = error {
+                throw EmbedError.scriptFailed("Python script timed out after \(Int(timeoutSeconds ?? 0))s")
             }
+            throw error
+        } catch {
+            throw error
         }
     }
 }

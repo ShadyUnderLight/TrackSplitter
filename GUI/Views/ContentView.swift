@@ -27,7 +27,8 @@ struct ContentView: View {
             case .processing:
                 ProcessingView(
                     progress: viewModel.progress,
-                    logs: viewModel.logs
+                    logs: viewModel.logs,
+                    onCancel: { viewModel.cancelProcessing() }
                 )
 
             case .complete(let completion):
