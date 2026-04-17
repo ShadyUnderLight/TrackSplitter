@@ -3,7 +3,7 @@ import TrackSplitterLib
 
 @main
 struct TrackSplitterCLI {
-    static func main() {
+    static func main() async {
         let args = Array(CommandLine.arguments.dropFirst())
 
         if args.isEmpty || args.contains("--help") || args.contains("-h") {
@@ -24,12 +24,12 @@ struct TrackSplitterCLI {
             exit(1)
         }
 
-        runCLI(audioPath: audioPath)
+        await runCLI(audioPath: audioPath)
     }
 
     // MARK: - CLI mode
 
-    private static func runCLI(audioPath: String) {
+    private static func runCLI(audioPath: String) async {
         let audioURL = URL(fileURLWithPath: audioPath)
 
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -52,25 +52,21 @@ struct TrackSplitterCLI {
 
         print("🎧 TrackSplitter v1.0.0\n")
 
-        let semaphore = DispatchSemaphore(value: 0)
-        var runResult: Result<Void, Error> = .success(())
-
-        Task {
-            do {
-                let result = try await engine.process(inputURL: audioURL)
-                print("\n✅ Done! \(result.trackFiles.count) tracks saved to:")
-                print("   \(result.outputDirectory.path)")
-                runResult = .success(())
-            } catch {
-                print("\n❌ Error: \(error.localizedDescription)")
-                runResult = .failure(error)
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                Task {
+                    do {
+                        let r = try await engine.process(inputURL: audioURL)
+                        print("\n✅ Done! \(r.trackFiles.count) tracks saved to:")
+                        print("   \(r.outputDirectory.path)")
+                        continuation.resume()
+                    } catch {
+                        print("\n❌ Error: \(error.localizedDescription)")
+                        continuation.resume(throwing: error)
+                    }
+                }
             }
-            semaphore.signal()
-        }
-
-        semaphore.wait()
-
-        if case .failure = runResult {
+        } catch {
             exit(1)
         }
     }
