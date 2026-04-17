@@ -80,10 +80,10 @@ public actor TrackSplitterEngine {
         /// Whether cover art was successfully fetched and embedded.
         public let coverEmbedded: Bool
         /// Per-track metadata embedding result.
-        public let metadataResult: MetadataEmbedder.EmbedResult
+        public let metadataResult: EmbedResult
 
         public init(outputDirectory: URL, trackFiles: [URL], albumTitle: String?, performer: String?,
-                    coverEmbedded: Bool, metadataResult: MetadataEmbedder.EmbedResult) {
+                    coverEmbedded: Bool, metadataResult: EmbedResult) {
             self.outputDirectory = outputDirectory
             self.trackFiles = trackFiles
             self.albumTitle = albumTitle
@@ -101,10 +101,10 @@ public actor TrackSplitterEngine {
         public let albumTitle: String?
         public let performer: String?
         public let coverEmbedded: Bool
-        public let metadataResult: MetadataEmbedder.EmbedResult
+        public let metadataResult: EmbedResult
 
         public init(outputDirectory: URL, trackFiles: [URL], albumTitle: String?, performer: String?,
-                    coverEmbedded: Bool, metadataResult: MetadataEmbedder.EmbedResult) {
+                    coverEmbedded: Bool, metadataResult: EmbedResult) {
             self.outputDirectory = outputDirectory
             self.trackFiles = trackFiles
             self.albumTitle = albumTitle
@@ -194,6 +194,21 @@ public actor TrackSplitterEngine {
     public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async -> EngineOutcome {
         _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
+
+        // 0. Pre-flight environment check — fail fast before any file operations
+        let envReport = await embedder.checkEnvironment()
+        if !envReport.isHealthy {
+            let issues = envReport.issues
+            let firstIssue = issues.first!
+            log("❌ Environment check failed: \(firstIssue.summary)")
+            for issue in issues {
+                log("   → \(issue.remediation)")
+            }
+            return .failure(message: "Environment check failed: \(firstIssue.summary)")
+        }
+        if let ver = envReport.pythonVersion {
+            log("🐍 Python \(ver) + mutagen OK | script: \(envReport.scriptPath ?? "unknown")")
+        }
 
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
         guard let cueURL = findCue(for: inputURL) else {
@@ -287,7 +302,7 @@ public actor TrackSplitterEngine {
 
         // 6. Embed metadata — partial metadata failure is now partialSuccess, not fatal
         log("🏷  Embedding metadata...")
-        let metadataResult: MetadataEmbedder.EmbedResult
+        let metadataResult: EmbedResult
         do {
             metadataResult = try await embedder.embedBatch(
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
@@ -304,7 +319,7 @@ public actor TrackSplitterEngine {
         } catch {
             // Metadata script crashed — treat as partial success with no metadata written
             log("⚠️  Metadata embedding threw (treating as partial success): \(error.localizedDescription)")
-            metadataResult = MetadataEmbedder.EmbedResult(
+            metadataResult = EmbedResult(
                 total: splitTracks.count,
                 succeeded: 0,
                 failed: splitTracks.count,
