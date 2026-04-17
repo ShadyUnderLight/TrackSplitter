@@ -94,7 +94,11 @@ public func parseCue(at url: URL) throws -> (tracks: [CueTrack], albumTitle: Str
         let line = raw.trimmingCharacters(in: .whitespaces)
 
         if let cap = match(line: line, pattern: #"PERFORMER "([^"]+)""#) {
-            performer = cap
+            // Only update performer at album level; track-level PERFORMER is valid CUE
+            // but we return a single performer field (album level) for now.
+            if curIdx == 0 {
+                performer = cap
+            }
         }
         else if let cap = match(line: line, pattern: #"TITLE "([^"]+)""#) {
             if curIdx > 0 {

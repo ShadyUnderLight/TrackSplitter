@@ -48,7 +48,11 @@ let package = Package(
             name: "TrackSplitterTests",
             dependencies: ["TrackSplitterLib"],
             path: "Tests",
-            sources: ["AudioSplitterTests.swift"]
+            sources: [
+                "AudioSplitterTests.swift",
+                "CueParserTests.swift",
+                "MetadataEmbedderResultTests.swift",
+            ]
         )
     ]
 )
