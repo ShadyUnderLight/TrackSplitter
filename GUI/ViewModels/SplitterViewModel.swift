@@ -163,8 +163,10 @@ else:
         phase = .processing
 
         let handler = TrackSplitterEngine.LogHandler { [weak self] message in
-            Task { @MainActor in
-                self?.appendLog(message, fallbackTotalTracks: loaded.tracks.count)
+            let totalTracks = loaded.tracks.count
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.appendLog(message, fallbackTotalTracks: totalTracks)
             }
         }
 
