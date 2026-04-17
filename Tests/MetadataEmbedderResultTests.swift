@@ -143,4 +143,19 @@ final class MetadataEmbedderResultTests: XCTestCase {
         XCTAssertTrue(result.isPartiallySuccessful)
         XCTAssertEqual(result.failures, ["bad.flac: permission denied"])
     }
+
+    // MARK: - Runtime script discovery (issue #18 follow-up)
+
+    /// Validates that embed_metadata.py is discoverable at runtime via Bundle.module
+    /// (the SwiftPM resource path). This test fails if the script is not correctly
+    /// placed in Library/Resources/ and declared in Package.swift.
+    func testScriptIsDiscoverableViaBundleResource() {
+        let bundleURL = Bundle.module.url(forResource: "embed_metadata", withExtension: "py")
+        XCTAssertNotNil(bundleURL, "embed_metadata.py must be in Library/Resources/ and declared as a SwiftPM resource")
+        if let url = bundleURL {
+            XCTAssertTrue(FileManager.default.isReadableFile(atPath: url.path),
+                "embed_metadata.py at \(url.path) must be readable")
+        }
+    }
+
 }

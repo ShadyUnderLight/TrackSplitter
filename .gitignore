@@ -6,3 +6,8 @@
 *.swo
 *.pyc
 __pycache__/
+
+# XcodeGen artifacts (generated inside GUI/ — do not commit to repo root)
+*.icns
+*.iconset/
+GUI/project.yml
