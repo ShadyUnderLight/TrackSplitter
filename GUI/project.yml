@@ -26,6 +26,11 @@ targets:
       - path: ../Library
         type: group
         name: TrackSplitterLib
+    preBuildScripts:
+      - name: Inject version from Library/Version.swift
+        script: |
+          "${PROJECT_DIR}/../Scripts/inject_version.sh"
+        basedOnDependencyAnalysis: false
     postBuildScripts:
       - name: Copy embed_metadata.py
         script: |
