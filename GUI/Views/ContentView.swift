@@ -217,9 +217,7 @@ final class DropZoneVisualView: NSView {
         return true
     }
 
-    private static let _supportedExtensions: Set<String> = [
-        "flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"
-    ]
+    private static let _supportedExtensions = SupportedAudioFormat.extensions
 
     private func hasFlacFile(_ info: NSDraggingInfo) -> Bool {
         guard let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else { return false }

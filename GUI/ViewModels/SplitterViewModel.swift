@@ -119,8 +119,7 @@ else:
     func load(audioURL: URL) {
         log("load() called: \(audioURL.path)")
 
-        let supported: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
-        guard supported.contains(audioURL.pathExtension.lowercased()) else {
+        guard SupportedAudioFormat.extensions.contains(audioURL.pathExtension.lowercased()) else {
             log("FAIL: unsupported format")
             setError("不支持的文件格式。支持：FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus")
             return

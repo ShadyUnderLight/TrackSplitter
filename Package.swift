@@ -41,6 +41,7 @@ let package = Package(
                 "GUI/Views/TrackListView.swift",
                 "GUI/Views/ProcessingView.swift",
                 "GUI/ViewModels/SplitterViewModel.swift",
+                "GUI/Models/SupportedAudioFormats.swift",
             ]
         ),
         .testTarget(
