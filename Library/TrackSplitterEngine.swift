@@ -165,11 +165,18 @@ public actor TrackSplitterEngine {
     /// Call this when the caller chooses not to keep a partial-success result.
     public func cleanup() {
         guard let out = _lastOutput else { return }
-        for file in out.trackFiles {
+        Self.cleanup(output: out)
+        _lastOutput = nil
+    }
+
+    /// Delete the given output's track files and output directory.
+    /// Exposed as a static method so callers who already hold an `Output` can clean up
+    /// without going through the engine instance.
+    public static func cleanup(output: Output) {
+        for file in output.trackFiles {
             try? FileManager.default.removeItem(at: file)
         }
-        try? FileManager.default.removeItem(at: out.outputDirectory)
-        _lastOutput = nil
+        try? FileManager.default.removeItem(at: output.outputDirectory)
     }
 
     /// Process an audio file + CUE sheet and produce individual track files with metadata.

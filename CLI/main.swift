@@ -74,7 +74,6 @@ struct TrackSplitterCLI {
                     print("     • \(f)")
                 }
             }
-            print("   Use --keep-partial to retain these files, or delete manually.")
         case .failure:
             print("\n❌ \(outcome.summary)")
             exit(1)
