@@ -174,33 +174,38 @@ else:
         }
 
         Task {
-            do {
-                let engine = TrackSplitterEngine(logHandler: handler)
-                self.activeEngine = engine
-                let result = try await engine.process(inputURL: loaded.audioURL,
-                                                      outputFormat: selectedOutputFormat.audioFormat)
-                let (coverData, _) = Completion.readCover(from: result.trackFiles)
-                let completion = Completion(
-                    outputDirectory: result.outputDirectory,
-                    trackFiles: result.trackFiles,
-                    albumTitle: result.albumTitle,
-                    performer: result.performer,
-                    coverImageData: coverData,
-                    coverEmbedded: result.coverEmbedded,
-                    metadataSucceededCount: result.metadataResult.succeeded,
-                    metadataFailedCount: result.metadataResult.failed,
-                    metadataFailures: result.metadataResult.failures
-                )
-                await MainActor.run {
-                    self.progress = 1
+            let engine = TrackSplitterEngine(logHandler: handler)
+            self.activeEngine = engine
+            let outcome = await engine.process(inputURL: loaded.audioURL,
+                                               outputFormat: selectedOutputFormat.audioFormat)
+
+            await MainActor.run {
+                self.progress = 1
+                switch outcome.status {
+                case .success, .partialSuccess:
+                    guard let output = outcome.output else {
+                        // Shouldn't happen, but treat as error
+                        self.setError("Internal error: no output available")
+                        self.activeEngine = nil
+                        return
+                    }
+                    let (coverData, _) = Completion.readCover(from: output.trackFiles)
+                    let completion = Completion(
+                        outputDirectory: output.outputDirectory,
+                        trackFiles: output.trackFiles,
+                        albumTitle: output.albumTitle,
+                        performer: output.performer,
+                        coverImageData: coverData,
+                        coverEmbedded: output.coverEmbedded,
+                        metadataSucceededCount: output.metadataResult.succeeded,
+                        metadataFailedCount: output.metadataResult.failed,
+                        metadataFailures: output.metadataResult.failures
+                    )
                     self.phase = .complete(completion)
-                    self.activeEngine = nil
+                case .failure:
+                    self.setError(outcome.summary)
                 }
-            } catch {
-                await MainActor.run {
-                    self.setError(error.localizedDescription)
-                    self.activeEngine = nil
-                }
+                self.activeEngine = nil
             }
         }
     }
