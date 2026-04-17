@@ -243,4 +243,36 @@ public actor AudioSplitter {
         let invalid = CharacterSet(charactersIn: "<>:\"/'\\|?*")
         return name.components(separatedBy: invalid).joined(separator: "_").trimmingCharacters(in: .whitespaces)
     }
+
+    /// Sanitizes a string for use as a directory name.
+    /// Removes characters unsafe for filesystems and trims trailing spaces.
+    /// Returns the cleaned name or "Untitled" if the result is empty.
+    package nonisolated func sanitizeDirectoryName(_ name: String) -> String {
+        let invalid = CharacterSet(charactersIn: "<>:\"/'\\|?*")
+        var sanitized = name.components(separatedBy: invalid).joined(separator: "_")
+            .trimmingCharacters(in: .whitespaces)
+        // Remove trailing dots (Windows reserved)
+        while sanitized.hasSuffix(".") { sanitized.removeLast() }
+        // Directory names cannot be empty after sanitization
+        if sanitized.isEmpty { sanitized = "Untitled" }
+        return sanitized
+    }
+
+    /// Resolves a unique output directory by appending a numeric suffix if the path already exists.
+    /// - Parameters:
+    ///   - baseDir:  Parent directory (e.g. the folder containing the input file).
+    ///   - safeName: Filesystem-safe directory name (already sanitized).
+    /// - Returns: A URL that does not yet exist on disk.
+    package nonisolated func resolveUniqueOutputDirectory(baseDir: URL, safeName: String) -> URL {
+        // safeName is already sanitized by the caller; only check filesystem.
+        var candidate = baseDir.appendingPathComponent(safeName)
+        if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+
+        var counter = 1
+        repeat {
+            candidate = baseDir.appendingPathComponent("\(safeName) (\(counter))")
+            counter += 1
+        } while FileManager.default.fileExists(atPath: candidate.path)
+        return candidate
+    }
 }

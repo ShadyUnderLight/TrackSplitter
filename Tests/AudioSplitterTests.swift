@@ -184,6 +184,107 @@ final class AudioSplitterTests: XCTestCase {
     }
 }
 
+/// Tests for directory name sanitization and conflict resolution (issue #25).
+final class AudioSplitterDirectoryTests: XCTestCase {
+
+    private var splitter: AudioSplitter!
+    private var tempDir: URL!
+
+    override func setUp() {
+        super.setUp()
+        // Use a fake ffmpeg/ffprobe just to get a splitter instance; these methods are pure.
+        splitter = AudioSplitter(ffmpegPath: "/usr/bin/true", ffprobePath: "/usr/bin/true")
+        tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    // MARK: - sanitizeDirectoryName
+
+    func testSanitizeDirectoryNameRemovesForwardSlash() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album/Name"), "Album_Name")
+    }
+
+    func testSanitizeDirectoryNameRemovesColon() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album: Name"), "Album_ Name")
+    }
+
+    func testSanitizeDirectoryNameRemovesTrailingSpace() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album Name  "), "Album Name")
+    }
+
+    func testSanitizeDirectoryNameRemovesBackslash() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album\\Name"), "Album_Name")
+    }
+
+    func testSanitizeDirectoryNameRemovesPipe() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album|Name"), "Album_Name")
+    }
+
+    func testSanitizeDirectoryNameRemovesTrailingDot() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album Name."), "Album Name")
+        XCTAssertEqual(splitter.sanitizeDirectoryName("Album Name.."), "Album Name")
+    }
+
+    func testSanitizeDirectoryNameFallsBackToUntitled() {
+        // `//::` → 4 chars all match → 5 empty segments → joined as "____" (not empty)
+        XCTAssertEqual(splitter.sanitizeDirectoryName("//::"), "____")
+        // All-whitespace collapses to empty after trim → "Untitled"
+        XCTAssertEqual(splitter.sanitizeDirectoryName("   "), "Untitled")
+    }
+
+    func testSanitizeDirectoryNamePreservesNormalName() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("My Album Title 2024"), "My Album Title 2024")
+    }
+
+    func testSanitizeDirectoryNameHandlesChinese() {
+        XCTAssertEqual(splitter.sanitizeDirectoryName("中国海油"), "中国海油")
+    }
+
+    // MARK: - resolveUniqueOutputDirectory
+
+    func testResolveUniqueOutputDirectoryReturnsBaseIfNotExists() {
+        let base = tempDir.appendingPathComponent("My Album")
+        let result = splitter.resolveUniqueOutputDirectory(baseDir: tempDir, safeName: "My Album")
+        XCTAssertEqual(result, base)
+    }
+
+    func testResolveUniqueOutputDirectoryAppendsCounterIfExists() {
+        let existing = tempDir.appendingPathComponent("My Album")
+        try! FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+
+        let result = splitter.resolveUniqueOutputDirectory(baseDir: tempDir, safeName: "My Album")
+        XCTAssertEqual(result.lastPathComponent, "My Album (1)")
+    }
+
+    func testResolveUniqueOutputDirectoryFindsFreeSlot() {
+        // Pre-create two conflicts
+        try! FileManager.default.createDirectory(at: tempDir.appendingPathComponent("Album"), withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: tempDir.appendingPathComponent("Album (1)"), withIntermediateDirectories: true)
+
+        let result = splitter.resolveUniqueOutputDirectory(baseDir: tempDir, safeName: "Album")
+        XCTAssertEqual(result.lastPathComponent, "Album (2)")
+    }
+
+    func testResolveUniqueOutputDirectoryReturnsNextFreeSlot() {
+        // Pre-conflict: Album (1) through Album (5) exist
+        for i in 1...5 {
+            let d = tempDir.appendingPathComponent("Album (\(i))")
+            try! FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        }
+        // Album itself also exists → free slot should be (6)
+        try! FileManager.default.createDirectory(at: tempDir.appendingPathComponent("Album"), withIntermediateDirectories: true)
+
+        let result = splitter.resolveUniqueOutputDirectory(baseDir: tempDir, safeName: "Album")
+        XCTAssertEqual(result.lastPathComponent, "Album (6)",
+            "Should skip 1-5 and find (6) as first free slot")
+    }
+}
+
 /// Thread-safe bool wrapper for capturing progress callback state.
 private final class ThreadSafe {
     var value: Bool
