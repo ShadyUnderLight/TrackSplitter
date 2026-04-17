@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-test:
     runs-on: macos-14
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +34,7 @@ jobs:
           fi
 
           # Check for swap files
-          SWAP_FILES=$(find . -name "*.swp" -o -name "*.swo" -not -path "./.git/*")
+          SWAP_FILES=$(find . \( -name "*.swp" -o -name "*.swo" \) -not -path "./.git/*")
           if [ -n "$SWAP_FILES" ]; then
             echo "ERROR: swap files found:"
             echo "$SWAP_FILES"
