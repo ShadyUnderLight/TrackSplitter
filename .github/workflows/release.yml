@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build number
+        run: |
+          BUILD_NUM=$(git rev-list --count HEAD)
+          echo "build_num=$BUILD_NUM" >> $GITHUB_OUTPUT
+        id: build_num
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec GUI/project.yml --project GUI/
+
+      - name: Inject version
+        env:
+          TS_BUILD_NUMBER: ${{ steps.build_num.outputs.build_num }}
+        run: Scripts/inject_version.sh
+
+      - name: Verify version
+        run: |
+          grep "currentVersion" Library/Version.swift | head -1
+          grep "buildNumber" Library/Version.swift | head -1
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" GUI/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" GUI/App/Info.plist
+
+      - name: Build GUI app
+        run: |
+          xcodebuild -project GUI/TrackSplitter.xcodeproj \
+            -scheme TrackSplitter \
+            -configuration Release \
+            -derivedDataPath ./DerivedData \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Package
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          ditto -c -k --keepParent \
+            DerivedData/Build/Products/Release/TrackSplitter.app \
+            "TrackSplitter-${VERSION}.zip"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body: |
+            ## TrackSplitter ${{ github.ref_name }}
+
+            Built from tag `${{ github.ref_name }}`, build `${{ steps.build_num.outputs.build_num }}`.
+
+            **Requirements:** macOS 13.0 or later
+
+            **Install:**
+            ```bash
+            cp -r TrackSplitter.app /Applications/
+            ```
+          files: TrackSplitter-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

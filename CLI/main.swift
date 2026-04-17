@@ -12,7 +12,7 @@ struct TrackSplitterCLI {
         }
 
         if args.contains("--version") {
-            print("TrackSplitter 1.0.0")
+            print("TrackSplitter \(Version.cliVersion)")
             return
         }
 
@@ -50,7 +50,7 @@ struct TrackSplitterCLI {
 
         let engine = TrackSplitterEngine(logHandler: handler)
 
-        print("🎧 TrackSplitter v1.0.0\n")
+        print("🎧 TrackSplitter v\(Version.currentVersion) (build \(Version.buildNumber))\n")
 
         let outcome = await engine.process(inputURL: audioURL)
         switch outcome.status {
@@ -100,6 +100,6 @@ struct TrackSplitterCLI {
 
     Requirements:
       • ffmpeg    (brew install ffmpeg)
-      • python3 + mutagen  (pip3 install mutagen --break-system-packages)
+      • python3 + mutagen  (python3 -m pip install mutagen; venv: python3 -m venv .venv && .venv/bin/pip install mutagen)
     """
 }
