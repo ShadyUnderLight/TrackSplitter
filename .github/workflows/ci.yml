@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check repository hygiene
+        run: |
+          echo "=== Checking for prohibited files ==="
+          # Check for .bak files
+          BAK_FILES=$(find . -name "*.bak" -not -path "./.git/*")
+          if [ -n "$BAK_FILES" ]; then
+            echo "ERROR: .bak files found:"
+            echo "$BAK_FILES"
+            exit 1
+          fi
+
+          # Check for .DS_Store
+          DS_STORE=$(find . -name ".DS_Store" -not -path "./.git/*")
+          if [ -n "$DS_STORE" ]; then
+            echo "ERROR: .DS_Store files found:"
+            echo "$DS_STORE"
+            exit 1
+          fi
+
+          # Check for swap files
+          SWAP_FILES=$(find . -name "*.swp" -o -name "*.swo" -not -path "./.git/*")
+          if [ -n "$SWAP_FILES" ]; then
+            echo "ERROR: swap files found:"
+            echo "$SWAP_FILES"
+            exit 1
+          fi
+
+          # Check for __pycache__
+          PYTC=$(find . -type d -name "__pycache__" -not -path "./.git/*")
+          if [ -n "$PYTC" ]; then
+            echo "ERROR: __pycache__ directories found:"
+            echo "$PYTC"
+            exit 1
+          fi
+
+          echo "Hygiene check passed."
+
+      - name: Build
+        run: swift build --configuration release
+
+      - name: Run tests
+        run: swift test
