@@ -14,7 +14,12 @@
 
 - **macOS 13+**
 - **ffmpeg** — `brew install ffmpeg`
-- **Python 3 + mutagen** — `pip3 install mutagen --break-system-packages`
+- **Python 3 + mutagen** — recommended to install in a virtual environment:
+  ```bash
+  python3 -m venv ~/.tracksplitter-venv
+  ~/.tracksplitter-venv/bin/pip install mutagen
+  ```
+  Then invoke TrackSplitter with the venv activated, or adjust the shebang path.
 
 ## 从源码构建
 

@@ -2,15 +2,15 @@ import Foundation
 @testable import TrackSplitterLib
 import XCTest
 
-/// Tests for MetadataEmbedder stdout parsing and EmbedResult construction.
-/// Calls the production `MetadataEmbedder.parseOutput()` directly to ensure
+/// Tests for PythonMetadataAdapter stdout parsing and EmbedResult construction.
+/// Calls the production `PythonMetadataAdapter.parseOutput()` directly to ensure
 /// tests exercise the actual production code path.
 final class MetadataEmbedderResultTests: XCTestCase {
 
     // MARK: - EmbedResult computed properties
 
     func testFullySuccessful_allSucceeded() {
-        let result = MetadataEmbedder.EmbedResult(
+        let result = EmbedResult(
             total: 3, succeeded: 3, failed: 0, failures: [], coverWasSkipped: false
         )
         XCTAssertTrue(result.isFullySuccessful)
@@ -18,7 +18,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
     }
 
     func testFullySuccessful_allSucceededWithSkipped() {
-        let result = MetadataEmbedder.EmbedResult(
+        let result = EmbedResult(
             total: 3, succeeded: 3, failed: 0, failures: [], coverWasSkipped: true
         )
         XCTAssertTrue(result.isFullySuccessful)
@@ -27,7 +27,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
     }
 
     func testPartiallySuccessful() {
-        let result = MetadataEmbedder.EmbedResult(
+        let result = EmbedResult(
             total: 3, succeeded: 2, failed: 1, failures: ["file2.flac: encoding error"], coverWasSkipped: false
         )
         XCTAssertFalse(result.isFullySuccessful)
@@ -35,7 +35,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
     }
 
     func testAllFailed() {
-        let result = MetadataEmbedder.EmbedResult(
+        let result = EmbedResult(
             total: 3, succeeded: 0, failed: 3, failures: ["f1.flac", "f2.flac", "f3.flac"], coverWasSkipped: false
         )
         XCTAssertFalse(result.isFullySuccessful)
@@ -45,7 +45,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
 
     func testZeroTotals() {
         // With total=0 and no failures, isFullySuccessful is true (failed==0).
-        let result = MetadataEmbedder.EmbedResult(
+        let result = EmbedResult(
             total: 0, succeeded: 0, failed: 0, failures: [], coverWasSkipped: false
         )
         XCTAssertTrue(result.isFullySuccessful)
@@ -56,7 +56,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
 
     func testParseOutput_allDONE() {
         let stdout = "DONE: file1.flac\nDONE: file2.flac\n"
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 2)
         XCTAssertEqual(parsed.failed, 0)
         XCTAssertTrue(parsed.failures.isEmpty)
@@ -69,7 +69,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
         SKIP: file2.wav (cover art skipped)
         ERROR: file3.mp3 invalid tag
         """
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 2)
         XCTAssertEqual(parsed.failed, 1)
         XCTAssertEqual(parsed.failures, ["file3.mp3 invalid tag"])
@@ -78,14 +78,14 @@ final class MetadataEmbedderResultTests: XCTestCase {
 
     func testParseOutput_emptyLinesIgnored() {
         let stdout = "DONE: file1.flac\n\nDONE: file2.flac\n  \n"
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 2)
         XCTAssertEqual(parsed.failed, 0)
     }
 
     func testParseOutput_noMatch() {
         let stdout = "something went wrong\nrandom output"
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 0)
         XCTAssertEqual(parsed.failed, 0)
         XCTAssertTrue(parsed.failures.isEmpty)
@@ -93,7 +93,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
 
     func testParseOutput_coverWasSkippedOnly() {
         let stdout = "SKIP: track.wav (unsupported format, cover art skipped)"
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 1)
         XCTAssertTrue(parsed.coverWasSkipped)
     }
@@ -104,7 +104,7 @@ final class MetadataEmbedderResultTests: XCTestCase {
         ERROR: b.flac: io error
         DONE: c.flac
         """
-        let parsed = MetadataEmbedder.parseOutput(stdout)
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
         XCTAssertEqual(parsed.succeeded, 1)
         XCTAssertEqual(parsed.failed, 2)
         XCTAssertEqual(parsed.failures, ["a.flac: permission denied", "b.flac: io error"])
@@ -114,8 +114,8 @@ final class MetadataEmbedderResultTests: XCTestCase {
 
     func testEmbedResult_roundTripFullySuccessful() {
         let stdout = "DONE: a.flac\nDONE: b.flac\nDONE: c.flac\n"
-        let parsed = MetadataEmbedder.parseOutput(stdout)
-        let result = MetadataEmbedder.EmbedResult(
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
+        let result = EmbedResult(
             total: 3,
             succeeded: parsed.succeeded,
             failed: parsed.failed,
@@ -132,8 +132,8 @@ final class MetadataEmbedderResultTests: XCTestCase {
         DONE: good.flac
         ERROR: bad.flac: permission denied
         """
-        let parsed = MetadataEmbedder.parseOutput(stdout)
-        let result = MetadataEmbedder.EmbedResult(
+        let parsed = PythonMetadataAdapter.parseOutput(stdout)
+        let result = EmbedResult(
             total: 2,
             succeeded: parsed.succeeded,
             failed: parsed.failed,

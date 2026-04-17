@@ -121,7 +121,7 @@ final class EngineOutcomeTests: XCTestCase {
             albumTitle: nil,
             performer: nil,
             coverEmbedded: false,
-            metadataResult: MetadataEmbedder.EmbedResult(
+            metadataResult: EmbedResult(
                 total: 1, succeeded: 1, failed: 0, failures: [], coverWasSkipped: false
             )
         )
@@ -144,7 +144,7 @@ final class EngineOutcomeTests: XCTestCase {
             albumTitle: albumName,
             performer: "Test Artist",
             coverEmbedded: true,
-            metadataResult: MetadataEmbedder.EmbedResult(
+            metadataResult: EmbedResult(
                 total: trackCount,
                 succeeded: trackCount,
                 failed: 0,
