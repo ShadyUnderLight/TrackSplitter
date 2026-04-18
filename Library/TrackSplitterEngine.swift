@@ -191,28 +191,95 @@ public actor TrackSplitterEngine {
     ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
     ///     `.flac` = re-encode to FLAC (lossless, smaller file).
     ///     `.wav` = re-encode to WAV (lossless PCM, larger file).
-    public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async -> EngineOutcome {
+    public func process(
+        inputURL: URL,
+        outputFormat: AudioSplitter.AudioFormat? = nil,
+        chapterSource: ChapterSource? = nil
+    ) async -> EngineOutcome {
         _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
 
-        // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
-        guard let cueURL = findCue(for: inputURL) else {
+        // ─── Resolve chapter source ───────────────────────────────────────────────
+        typealias ChapterResult = ([CueTrack], String?, String?, CueFile?, CueRem, String)
+
+        func resolve(source: ChapterSource?) async throws -> ChapterResult {
+            if let src = source {
+                switch src {
+                case .cue(let url):
+                    log("📋 Chapter source: CUE (\(url.lastPathComponent))")
+                    let (t, at, p, cf, cr) = try parseCue(at: url)
+                    return (t, at, p, cf, cr, "CUE")
+
+                case .textChapters(let url):
+                    log("📋 Chapter source: text chapters (\(url.lastPathComponent))")
+                    let entries = try TextChapterParser().parse(at: url)
+                    let t = entries.enumerated().map { i, e in
+                        CueTrack(index: i + 1, title: e.title,
+                                  startSeconds: e.startSeconds, endSeconds: nil)
+                    }
+                    return (t, nil, nil, nil, CueRem(), "text chapters")
+
+                case .ffmpegChapters(let url):
+                    log("📋 Chapter source: FFmpeg chapters (\(url.lastPathComponent))")
+                    let entries = try FFmpegChapterParser().parse(at: url)
+                    let t = entries.enumerated().map { i, e in
+                        CueTrack(index: i + 1, title: e.title,
+                                  startSeconds: e.startSeconds, endSeconds: nil)
+                    }
+                    return (t, nil, nil, nil, CueRem(), "FFmpeg chapters")
+
+                case .embedded(let url):
+                    log("📋 Chapter source: embedded (\(url.lastPathComponent))")
+                    let entries = try await EmbeddedChapterReader().read(from: url)
+                    let t = entries.enumerated().map { i, e in
+                        CueTrack(index: i + 1, title: e.title,
+                                  startSeconds: e.startSeconds, endSeconds: nil)
+                    }
+                    return (t, nil, nil, nil, CueRem(), "embedded")
+                }
+            }
+
+            // No source provided: auto-detect CUE
+            guard let cueURL = findCue(for: inputURL) else {
+                return ([], nil, nil, nil, CueRem(), "none")
+            }
+            log("📋 Chapter source: auto-detected CUE (\(cueURL.lastPathComponent))")
+            let (t, at, p, cf, cr) = try parseCue(at: cueURL)
+            return (t, at, p, cf, cr, "CUE")
+        }
+
+        // ─── Execute resolve and handle result ────────────────────────────────────
+        var tracks: [CueTrack]          = []
+        var albumTitle: String?           = nil
+        var performer: String?            = nil
+        var cueFile: CueFile?             = nil
+        var cueRem: CueRem                = CueRem()
+        var sourceLabel: String           = "unknown"
+
+        let result: ChapterResult
+        do {
+            result = try await resolve(source: chapterSource)
+        } catch {
+            return .failure(message: "Chapter parse error: \(error.localizedDescription)")
+        }
+        (tracks, albumTitle, performer, cueFile, cueRem, sourceLabel) = result
+
+        if sourceLabel == "none" && tracks.isEmpty {
             return .failure(message: EngineError.noCueFile(inputURL).localizedDescription)
         }
-        log("📋 CUE found: \(cueURL.lastPathComponent)")
 
-        // 2. Parse CUE (handles Chinese encodings via Big5/CP950 detection)
-        let (tracks, albumTitle, performer, cueFile, cueRem): ([CueTrack], String?, String?, CueFile?, CueRem)
-        do {
-            (tracks, albumTitle, performer, cueFile, cueRem) = try parseCue(at: cueURL)
-        } catch {
-            return .failure(message: "CUE parse error: \(error.localizedDescription)")
+        guard !tracks.isEmpty else {
+            return .failure(message: EngineError.emptyTracks.localizedDescription)
         }
-        log("🎵 Tracks: \(tracks.count) | Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
-        log("📋 REM: date=\(cueRem.date ?? "—") genre=\(cueRem.genre ?? "—") comment=\(cueRem.comment ?? "—") composer=\(cueRem.composer ?? "—") discNumber=\(cueRem.discNumber ?? "—")")
 
-        // 2b. Validate FILE field if present — use fuzzy match to handle encoding mismatches
-        if let cf = cueFile {
+        log("🎵 Tracks: \(tracks.count) | Source: \(sourceLabel)")
+        if sourceLabel == "CUE" {
+            log("🎵 Album: \(albumTitle ?? "—") | Artist: \(performer ?? "—")")
+            log("📋 REM: date=\(cueRem.date ?? "—") genre=\(cueRem.genre ?? "—") comment=\(cueRem.comment ?? "—") composer=\(cueRem.composer ?? "—") discNumber=\(cueRem.discNumber ?? "—")")
+        }
+
+        // Cue FILE field validation (CUE path only)
+        if sourceLabel == "CUE", let cf = cueFile {
             let cueDeclaredName = cf.resolvedURL.lastPathComponent
             let similarity = stringSimilarity(cueDeclaredName, inputURL.lastPathComponent)
             if similarity < 0.80 {
@@ -224,11 +291,7 @@ public actor TrackSplitterEngine {
             }
         }
 
-        guard !tracks.isEmpty else {
-            return .failure(message: EngineError.emptyTracks.localizedDescription)
-        }
-
-        // 2. Pre-flight environment check — after input validation, before any file system operations
+        // 2. Pre-flight environment check// 2. Pre-flight environment check — after input validation, before any file system operations// 2. Pre-flight environment check — after input validation, before any file system operations
         let envReport = await embedder.checkEnvironment()
         if !envReport.isHealthy {
             let issues = envReport.issues
