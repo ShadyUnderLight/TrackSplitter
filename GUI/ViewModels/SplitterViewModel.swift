@@ -163,18 +163,76 @@ final class SplitterViewModel: ObservableObject {
         /// Cover art fetch error if any.
         let metadataFailures: [String]
 
-        /// 从第一个 FLAC 文件读取封面图数据（Data?）。
+        /// 从输出文件中读取封面图数据，支持所有嵌入格式（FLAC/MP3/M4A/AIFF 等）。
         static func readCover(from files: [URL]) -> (data: Data?, pythonPath: String) {
-            guard let firstTrack = files.first(where: { $0.pathExtension.lowercased() == "flac" }) else {
+            guard !files.isEmpty else { return (nil, "") }
+            // 构造 JSON 列表传递给 Python，避免 shell 转义问题
+            let filePaths = files.map { $0.path }
+            guard let jsonData = try? JSONEncoder().encode(filePaths),
+                  let filePathsArg = String(data: jsonData, encoding: .utf8) else {
                 return (nil, "")
             }
             let tmpPath = NSTemporaryDirectory() + "ts_cover_\(UUID().uuidString).png"
             let script = """
+import sys, json
 from mutagen.flac import FLAC
-f = FLAC('\(firstTrack.path)')
-if f.pictures:
-    open('\(tmpPath)', 'wb').write(f.pictures[0].data)
-    print('OK')
+from mutagen.mp3 import MP3
+from mutagen.m4a import M4A
+from mutagen.aiff import AIFF
+
+paths = json.loads(sys.argv[1])
+tmp = sys.argv[2]
+
+for path in paths:
+    ext = path.rsplit('.', 1)[-1].lower()
+    try:
+        if ext == 'flac':
+            f = FLAC(path)
+            if f.pictures:
+                open(tmp, 'wb').write(f.pictures[0].data)
+                print('OK')
+                break
+        elif ext == 'mp3':
+            f = MP3(path)
+            # 先检查 pictures 属性（ID3 v2.4 APIC）
+            if hasattr(f, 'pictures') and f.pictures:
+                open(tmp, 'wb').write(f.pictures[0].data)
+                print('OK')
+                break
+            # 兼容旧版 mutagen：直接遍历 tags
+            if f.tags:
+                for frame in f.tags.values():
+                    if hasattr(frame, 'FrameID') and frame.FrameID == 'APIC':
+                        open(tmp, 'wb').write(frame.data)
+                        print('OK')
+                        break
+                else:
+                    continue
+                break
+        elif ext in ('m4a', 'aac', 'alac'):
+            f = M4A(path)
+            if f.pictures:
+                open(tmp, 'wb').write(f.pictures[0].data)
+                print('OK')
+                break
+        elif ext == 'aiff':
+            f = AIFF(path)
+            if hasattr(f, 'pictures') and f.pictures:
+                open(tmp, 'wb').write(f.pictures[0].data)
+                print('OK')
+                break
+            # AIFF 也用 ID3
+            if f.tags:
+                for frame in f.tags.values():
+                    if hasattr(frame, 'FrameID') and frame.FrameID == 'APIC':
+                        open(tmp, 'wb').write(frame.data)
+                        print('OK')
+                        break
+                else:
+                    continue
+                break
+    except Exception:
+        continue
 else:
     print('NO_COVER')
 """
@@ -184,7 +242,7 @@ else:
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: pythonPath)
-            proc.arguments = ["-c", script]
+            proc.arguments = ["-c", script, filePathsArg, tmpPath]
             try? proc.run()
             proc.waitUntilExit()
             guard FileManager.default.fileExists(atPath: tmpPath) else { return (nil, pythonPath) }
