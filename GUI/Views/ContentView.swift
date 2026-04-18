@@ -25,7 +25,10 @@ struct ContentView: View {
                     onStart: { viewModel.startProcessing() },
                     selectedOutputFormat: $viewModel.selectedOutputFormat,
                     selectedChapterSourceType: $viewModel.selectedChapterSourceType,
-                    chapterSourceURL: $viewModel.chapterSourceURL
+                    chapterSourceURL: $viewModel.chapterSourceURL,
+                    customOutputDirectory: $viewModel.customOutputDirectory,
+                    nameTemplate: $viewModel.nameTemplate,
+                    overwritePolicy: $viewModel.overwritePolicy
                 )
 
             case .processing:
@@ -292,6 +295,11 @@ struct LoadedView: View {
     @Binding var selectedOutputFormat: AudioSplitterOutputFormat
     @Binding var selectedChapterSourceType: ChapterSourceType
     @Binding var chapterSourceURL: URL?
+    @Binding var customOutputDirectory: URL?
+    @Binding var nameTemplate: String
+    @Binding var overwritePolicy: AudioSplitter.OverwritePolicy
+
+    @State private var isShowingDirectoryPicker = false
 
 
 
@@ -362,6 +370,66 @@ struct LoadedView: View {
                 }
 
                 Spacer()
+
+                // Output directory picker
+                HStack(spacing: 6) {
+                    Text("目录：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let dir = customOutputDirectory {
+                        Text(dir.lastPathComponent)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text("（默认）")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("选择...") {
+                        isShowingDirectoryPicker = true
+                    }
+                    .font(.caption)
+                    .buttonStyle(.link)
+                    if customOutputDirectory != nil {
+                        Button("清除") {
+                            customOutputDirectory = nil
+                        }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                    }
+                }
+
+                Divider().frame(height: 16)
+
+                // Filename template
+                HStack(spacing: 6) {
+                    Text("文件名：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("{index}. {title}", text: $nameTemplate)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(width: 160)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Divider().frame(height: 16)
+
+                // Overwrite policy
+                HStack(spacing: 6) {
+                    Text("冲突：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $overwritePolicy) {
+                        Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
+                        Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
+                        Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 80)
+                }
+
+                Divider().frame(height: 16)
 
                 // Output format selector
                 HStack(spacing: 8) {
@@ -435,6 +503,16 @@ struct LoadedView: View {
                 selectedChapterSourceType = .auto
                 chapterSourceURL = nil
             }
+        }
+        .fileImporter(
+            isPresented: $isShowingDirectoryPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                customOutputDirectory = url
+            }
+            isShowingDirectoryPicker = false
         }
     }
 }
