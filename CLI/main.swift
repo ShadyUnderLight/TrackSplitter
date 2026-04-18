@@ -16,26 +16,63 @@ struct TrackSplitterCLI {
             return
         }
 
-        // Parse --output-format
-        var outputFormatArg: String?
+        // Parse --chapter-source
+        // Parse chapter source options.
+        // --chapter-source and --chapter-file are mutually exclusive.
+        // Each parses from already-filtered args so consumed options don't reappear.
+        var chapterSourceArg: String?
+        var chapterFileArg: String?
         var filteredArgs = args
-        if let idx = args.firstIndex(of: "--output-format") {
-            guard idx + 1 < args.count else {
+
+        // --chapter-source
+        if let idx = filteredArgs.firstIndex(of: "--chapter-source") {
+            guard idx + 1 < filteredArgs.count else {
+                print("Error: --chapter-source requires a value (e.g. --chapter-source embedded)")
+                exit(1)
+            }
+            chapterSourceArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--chapter-source=") }) {
+            chapterSourceArg = String(filteredArgs[idx].dropFirst("--chapter-source=".count))
+            filteredArgs.remove(at: idx)
+        }
+
+        // --chapter-file (mutually exclusive with --chapter-source)
+        if let idx = filteredArgs.firstIndex(of: "--chapter-file") {
+            if chapterSourceArg != nil {
+                print("Error: --chapter-source and --chapter-file are mutually exclusive.")
+                exit(1)
+            }
+            guard idx + 1 < filteredArgs.count else {
+                print("Error: --chapter-file requires a path (e.g. --chapter-file /path/to/chapters.txt)")
+                exit(1)
+            }
+            chapterFileArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--chapter-file=") }) {
+            if chapterSourceArg != nil {
+                print("Error: --chapter-source and --chapter-file are mutually exclusive.")
+                exit(1)
+            }
+            chapterFileArg = String(filteredArgs[idx].dropFirst("--chapter-file=".count))
+            filteredArgs.remove(at: idx)
+        }
+
+        // --output-format (always parsed from already-filtered list)
+        var outputFormatArg: String?
+        if let idx = filteredArgs.firstIndex(of: "--output-format") {
+            guard idx + 1 < filteredArgs.count else {
                 print("Error: --output-format requires a value (e.g. --output-format mp3)")
                 exit(1)
             }
-            outputFormatArg = args[idx + 1]
-            // Remove exactly the --output-format flag and its value by index, not by value
-            var copy = args
-            copy.remove(at: idx + 1)
-            copy.remove(at: idx)
-            filteredArgs = copy
-        } else if let idx = args.firstIndex(where: { $0.hasPrefix("--output-format=") }) {
-            outputFormatArg = String(args[idx].dropFirst("--output-format=".count))
-            // Remove exactly this argument by index
-            var copy = args
-            copy.remove(at: idx)
-            filteredArgs = copy
+            outputFormatArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--output-format=") }) {
+            outputFormatArg = String(filteredArgs[idx].dropFirst("--output-format=".count))
+            filteredArgs.remove(at: idx)
         }
 
         // Validate output format early
@@ -60,12 +97,43 @@ struct TrackSplitterCLI {
             exit(1)
         }
 
-        await runCLI(audioPath: audioPath, outputFormat: outputFormat)
+        // Parse chapter source (audioPath is now available for .embedded case)
+        let chapterSource: ChapterSource?
+        if let raw = chapterSourceArg {
+            if raw == "embedded" {
+                chapterSource = .embedded(URL(fileURLWithPath: audioPath))
+            } else if raw == "cue" || raw == "auto" {
+                chapterSource = nil  // auto-detect CUE (default)
+            } else {
+                print("Error: '\(raw)' is not a valid --chapter-source value.")
+                print("Valid values: embedded, cue, auto")
+                exit(1)
+            }
+        } else if let path = chapterFileArg {
+            let fileURL = URL(fileURLWithPath: path)
+            guard FileManager.default.isReadableFile(atPath: path) else {
+                print("Error: Chapter file not found: \(path)")
+                exit(1)
+            }
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "cue" || ext == "qcue" {
+                chapterSource = .cue(fileURL)
+            } else if ext == "meta" || ext == "ffmetadata" {
+                chapterSource = .ffmpegChapters(fileURL)
+            } else {
+                // Default: treat as text chapters
+                chapterSource = .textChapters(fileURL)
+            }
+        } else {
+            chapterSource = nil  // auto-detect CUE
+        }
+
+        await runCLI(audioPath: audioPath, outputFormat: outputFormat, chapterSource: chapterSource)
     }
 
     // MARK: - CLI mode
 
-    private static func runCLI(audioPath: String, outputFormat: AudioSplitter.AudioFormat?) async {
+    private static func runCLI(audioPath: String, outputFormat: AudioSplitter.AudioFormat?, chapterSource: ChapterSource?) async {
         let audioURL = URL(fileURLWithPath: audioPath)
 
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -94,7 +162,7 @@ struct TrackSplitterCLI {
             print("Output format: passthrough (keeping original format)\n")
         }
 
-        let outcome = await engine.process(inputURL: audioURL, outputFormat: outputFormat)
+        let outcome = await engine.process(inputURL: audioURL, outputFormat: outputFormat, chapterSource: chapterSource)
         switch outcome.status {
         case .success:
             guard let output = outcome.output else {
@@ -130,23 +198,35 @@ struct TrackSplitterCLI {
     Supported formats: FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus
 
     Usage:
-      tracksplitter <file>                    Process an audio file from the command line
-      tracksplitter <file> --output-format mp3  Re-encode output to MP3
+      tracksplitter <file>                         Process an audio file (uses .cue if found)
+      tracksplitter <file> --chapter-source embedded  Read chapters from the audio file itself
+      tracksplitter <file> --chapter-file /path/to/chapters.txt  Use a text/FFmpeg chapter file
+      tracksplitter <file> --output-format mp3      Re-encode output to MP3
 
-    Options:
-      --help, -h           Show this help
-      --version            Show version
+    Chapter source options:
+      --chapter-source auto       Auto-detect CUE in the same directory (default)
+      --chapter-source embedded   Read chapters from the input audio file (if any)
+      --chapter-source cue        Explicit CUE sheet (via file picker)
+      --chapter-file <path>       Use a chapter definition file:
+                                   • .cue / .qcue  → CUE sheet
+                                   • .meta / .ffmetadata → FFmpeg chapter file
+                                   • anything else → plain text chapters (one "HH:MM:SS Title" per line)
+
+    Text chapter file format:
+      00:00:00 Track 1 Title
+      00:03:45 - Track 2 Title
+      [00:07:30] Track 3 Title
+
+    FFmpeg chapter file format:
+      ;FFMETADATA1
+      CHAPTER0000=00:00:00.000
+      CHAPTER0000NAME=Track 1 Title
+      CHAPTER0001=00:03:45.000
+      CHAPTER0001NAME=Track 2 Title
+
+    Output format options:
       --output-format <fmt>  Output format. Omit to keep original format (passthrough).
-                             Valid formats: flac, mp3, wav, aiff, alac, m4a, aac, ogg, opus
-
-    Format notes:
-      • Passthrough (default): no re-encoding, fastest, preserves original quality.
-      • FLAC: lossless, widely supported, larger files.
-      • MP3: universally compatible, smaller files, lossy.
-      • WAV: uncompressed, large files, universal support.
-      • AIFF: uncompressed, Apple ecosystem.
-      • ALAC / M4A / AAC: Apple lossless or lossy, efficient.
-      • OGG / Opus: open formats, efficient.
+                              Valid: flac, mp3, wav, aiff, alac, m4a, aac, ogg, opus
 
     Metadata & cover art:
       Passthrough preserves all metadata. When re-encoding, some formats have
@@ -154,7 +234,8 @@ struct TrackSplitterCLI {
 
     Examples:
       tracksplitter "/Users/music/陈升-别让我哭.flac"
-      tracksplitter "/Users/music/album.mp3"
+      tracksplitter "/Users/music/album.flac" --chapter-source embedded
+      tracksplitter "/Users/music/album.flac" --chapter-file chapters.txt
       tracksplitter "/Users/music/album.wav" --output-format flac
 
     Requirements:
