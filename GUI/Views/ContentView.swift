@@ -14,6 +14,8 @@ struct ContentView: View {
             case .idle:
                 IdleView(onFileSelected: { url in
                     viewModel.selectedOutputFormat = .keepOriginal
+                    viewModel.selectedChapterSourceType = .auto
+                    viewModel.chapterSourceURL = nil
                     viewModel.load(audioURL: url)
                 })
 
@@ -21,7 +23,9 @@ struct ContentView: View {
                 LoadedView(
                     loaded: loaded,
                     onStart: { viewModel.startProcessing() },
-                    selectedOutputFormat: $viewModel.selectedOutputFormat
+                    selectedOutputFormat: $viewModel.selectedOutputFormat,
+                    selectedChapterSourceType: $viewModel.selectedChapterSourceType,
+                    chapterSourceURL: $viewModel.chapterSourceURL
                 )
 
             case .processing:
@@ -42,6 +46,8 @@ struct ContentView: View {
                     },
                     onProcessAnother: {
                         viewModel.selectedOutputFormat = .keepOriginal
+                        viewModel.selectedChapterSourceType = .auto
+                        viewModel.chapterSourceURL = nil
                         viewModel.processAnother()
                     }
                 )
@@ -284,6 +290,10 @@ struct LoadedView: View {
     let loaded: SplitterViewModel.LoadedFiles
     let onStart: () -> Void
     @Binding var selectedOutputFormat: AudioSplitterOutputFormat
+    @Binding var selectedChapterSourceType: ChapterSourceType
+    @Binding var chapterSourceURL: URL?
+
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -324,10 +334,32 @@ struct LoadedView: View {
             Divider()
 
             HStack {
-                Text("CUE: \(loaded.cueURL.lastPathComponent)")
+                Text("分割依据：")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+
+                Picker("", selection: $selectedChapterSourceType) {
+                    ForEach(ChapterSourceType.allCases) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .frame(width: 260)
+
+                // Show chosen file name for types that require a file
+                if selectedChapterSourceType.requiresFile {
+                    if let url = chapterSourceURL {
+                        Text(url.lastPathComponent)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 160)
+                    } else {
+                        Text("（未选择文件）")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
 
                 Spacer()
 
@@ -370,6 +402,40 @@ struct LoadedView: View {
             .background(Color(nsColor: .controlBackgroundColor))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: selectedChapterSourceType) { newValue in
+            if !newValue.requiresFile {
+                // Switching to auto or embedded — clear any previously picked file
+                chapterSourceURL = nil
+                return
+            }
+
+            // newValue requires a file — show NSOpenPanel
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+
+            switch newValue {
+            case .cue:
+                panel.allowedContentTypes = [UTType(filenameExtension: "cue")!, UTType(filenameExtension: "qcue")!]
+                panel.message = "选择 CUE 文件"
+            case .textChapters:
+                panel.allowedContentTypes = [.text, .plainText]
+                panel.message = "选择文本章节文件"
+            case .ffmpegChapters:
+                panel.allowedContentTypes = [UTType(filenameExtension: "meta")!, UTType(filenameExtension: "ffmetadata")!]
+                panel.message = "选择 FFmpeg 章节文件"
+            default:
+                break
+            }
+
+            if panel.runModal() == .OK, let url = panel.url {
+                chapterSourceURL = url
+            } else {
+                // User cancelled the panel — revert picker to auto (no file selected)
+                selectedChapterSourceType = .auto
+                chapterSourceURL = nil
+            }
+        }
     }
 }
 

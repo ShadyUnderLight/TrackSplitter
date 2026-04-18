@@ -71,6 +71,47 @@ public enum AudioSplitterOutputFormat: String, CaseIterable, Identifiable {
     }
 }
 
+/// Chapter source type for the split (GUI-facing enum).
+/// Maps to ChapterSource in the engine but decoupled for UI flexibility.
+public enum ChapterSourceType: String, CaseIterable, Identifiable {
+    case auto = "auto"
+    case cue = "cue"
+    case textChapters = "text"
+    case ffmpegChapters = "ffmpeg"
+    case embedded = "embedded"
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .auto:    return "自动检测 CUE"
+        case .cue:     return "CUE 文件..."
+        case .textChapters:  return "文本章节..."
+        case .ffmpegChapters: return "FFmpeg 章节..."
+        case .embedded:      return "嵌入章节（从音频文件读取）"
+        }
+    }
+
+    /// Whether this type requires the user to pick a file via NSOpenPanel.
+    var requiresFile: Bool {
+        switch self {
+        case .auto, .embedded: return false
+        case .cue, .textChapters, .ffmpegChapters: return true
+        }
+    }
+
+    /// Build a ChapterSource for engine call, given the audio file URL and a chosen file URL.
+    func buildChapterSource(audioURL: URL, fileURL: URL?) -> ChapterSource? {
+        switch self {
+        case .auto:    return nil
+        case .embedded: return .embedded(audioURL)
+        case .cue:     guard let u = fileURL else { return nil }; return .cue(u)
+        case .textChapters:  guard let u = fileURL else { return nil }; return .textChapters(u)
+        case .ffmpegChapters: guard let u = fileURL else { return nil }; return .ffmpegChapters(u)
+        }
+    }
+}
+
 /// 负责协调界面与核心引擎的视图模型。
 /// 直接持有所有 @Published 状态，不通过中间 AppState，避免跨对象观察链失效。
 @MainActor
@@ -161,6 +202,12 @@ else:
     /// Selected output format for the split. nil = same as input.
     @Published var selectedOutputFormat: AudioSplitterOutputFormat = .keepOriginal
 
+    /// Selected chapter source type for the split.
+    @Published var selectedChapterSourceType: ChapterSourceType = .auto
+
+    /// Resolved chapter source URL (set when user picks a file via NSOpenPanel).
+    @Published var chapterSourceURL: URL? = nil
+
     /// The currently running engine, if any. Used to support cancellation.
     private var activeEngine: TrackSplitterEngine?
 
@@ -222,8 +269,13 @@ else:
         Task {
             let engine = TrackSplitterEngine(logHandler: handler)
             self.activeEngine = engine
+            let chapterSource = selectedChapterSourceType.buildChapterSource(
+                audioURL: loaded.audioURL,
+                fileURL: chapterSourceURL
+            )
             let outcome = await engine.process(inputURL: loaded.audioURL,
-                                               outputFormat: selectedOutputFormat.audioFormat)
+                                               outputFormat: selectedOutputFormat.audioFormat,
+                                               chapterSource: chapterSource)
 
             await MainActor.run {
                 self.progress = 1
