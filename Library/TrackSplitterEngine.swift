@@ -154,6 +154,7 @@ public actor TrackSplitterEngine {
                 outputFormat: outputFormat,
                 nameTemplate: cfg.nameTemplate,
                 albumTitle: albumTitle ?? albumDirName,
+                artist: performer ?? "",
                 overwritePolicy: cfg.overwritePolicy
             ) { [weak self] progress in
                 Task { await self?.log("  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)...") }

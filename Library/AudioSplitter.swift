@@ -130,6 +130,7 @@ public actor AudioSplitter {
         outputFormat: AudioFormat? = nil,
         nameTemplate: String = "{index}. {title}.{ext}",
         albumTitle: String = "",
+        artist: String = "",
         overwritePolicy: OverwritePolicy = .rename,
         progressHandler: @escaping @Sendable (Progress) -> Void
     ) async throws -> [URL] {
@@ -177,6 +178,7 @@ public actor AudioSplitter {
                 nameTemplate,
                 track: track,
                 albumTitle: albumTitle,
+                artist: artist,
                 ext: outExt
             )
             let outURL = resolveOutputURL(
@@ -198,7 +200,8 @@ public actor AudioSplitter {
 
             // runFFmpeg returns the actual URL written (may differ if passthrough fell back to WAV)
             let actualURL = try await runFFmpeg(input: inputURL, start: track.startSeconds,
-                                duration: duration, output: outURL, acodecArgs: acodecArg)
+                                duration: duration, output: outURL, acodecArgs: acodecArg,
+                                overwritePolicy: overwritePolicy)
             outputs.append(actualURL)
         }
 
@@ -211,13 +214,14 @@ public actor AudioSplitter {
         _ template: String,
         track: CueTrack,
         albumTitle: String,
+        artist: String,
         ext: String
     ) -> String {
         let title = sanitizeFilename(track.title.isEmpty ? "Track_\(track.index)" : track.title)
         return template
             .replacingOccurrences(of: "{index}", with: String(track.index))
             .replacingOccurrences(of: "{title}", with: title)
-            .replacingOccurrences(of: "{artist}", with: "")
+            .replacingOccurrences(of: "{artist}", with: sanitizeFilename(artist))
             .replacingOccurrences(of: "{album}", with: sanitizeFilename(albumTitle))
             .replacingOccurrences(of: "{ext}", with: ext)
     }
@@ -241,14 +245,19 @@ public actor AudioSplitter {
     /// Runs ffmpeg and returns the actual URL that was written.
     /// If passthrough fails, falls back to PCM WAV — extension stays .wav to match actual codec.
     private func runFFmpeg(input: URL, start: Double, duration: Double,
-                           output: URL, acodecArgs: [String]) async throws -> URL {
+                           output: URL, acodecArgs: [String],
+                           overwritePolicy: OverwritePolicy) async throws -> URL {
         let isPassthrough = acodecArgs.first == "-acodec" && acodecArgs.last == "copy"
+        // .rename: file guaranteed absent by resolveOutputURL → safe to use -n
+        // .overwrite: user wants replacement → -y
+        // .skip: handled before calling runFFmpeg, never reaches here
+        let overwriteFlag = (overwritePolicy == .overwrite) ? "-y" : "-n"
 
         if isPassthrough {
             // Try stream copy first (no re-encode)
             do {
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                        output: output, extraArgs: acodecArgs)
+                                        output: output, extraArgs: acodecArgs, overwriteFlag: overwriteFlag)
                 return output
             } catch {
                 // Stream copy failed — fall back to PCM WAV.
@@ -256,25 +265,27 @@ public actor AudioSplitter {
                 try? FileManager.default.removeItem(at: output)
                 let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                        output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"])
+                                        output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"],
+                                        overwriteFlag: overwriteFlag)
                 return fallbackURL
             }
         } else {
             // Explicit codec requested (FLAC/WAV/MP3 etc.) — no stream copy fallback
             try await runFFmpegOnce(input: input, start: start, duration: duration,
-                                    output: output, extraArgs: acodecArgs)
+                                    output: output, extraArgs: acodecArgs, overwriteFlag: overwriteFlag)
             return output
         }
     }
 
     /// Run ffmpeg once with given arguments; throws on failure.
     private func runFFmpegOnce(input: URL, start: Double, duration: Double,
-                               output: URL, extraArgs: [String]) async throws {
+                               output: URL, extraArgs: [String],
+                               overwriteFlag: String = "-y") async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: ffmpegPath)
             process.arguments = [
-                "-y", "-i", input.path,
+                overwriteFlag, "-i", input.path,
                 "-ss", String(format: "%.3f", start),
                 "-t",  String(format: "%.3f", duration)
             ] + extraArgs + [output.path]
