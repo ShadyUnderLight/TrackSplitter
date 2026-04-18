@@ -1,65 +1,110 @@
 # Metadata Support Matrix
 
-Generated from `embed_metadata.py` field mapping. Tested combinations in `Tests/MetadataEmbeddingTests.swift`.
+This document describes the **actual implemented behavior** of `Library/Resources/embed_metadata.py`
+and the Swift `embedBatch` API in `Library/MetadataEmbedder.swift`.
+
+Tested combinations are in `Tests/MetadataEmbeddingTests.swift`.
+
+---
 
 ## Output Format Support
 
 | Field | FLAC | MP3 (ID3v2) | M4A/AAC/MP4 | WAV | AIFF | OGG | Opus |
 |-------|------|-------------|-------------|-----|------|-----|------|
-| title | ✅ | ✅ TIT2 | ✅ ©nam | ✅ | ✅ | ✅ | ✅ |
-| artist | ✅ | ✅ TPE1 | ✅ ©ART | ✅ | ✅ | ✅ | ✅ |
-| album | ✅ | ✅ TALB | ✅ ©alb | ✅ | ✅ | ✅ | ✅ |
-| album artist | ✅ ALBUMARTIST | ✅ TPE2 | ✅ ©aART | ❌ | ❌ | ❌ | ❌ |
-| year | ✅ DATE | ✅ TDRC (ID3v2.4) | ✅ ©day | ✅ | ✅ | ✅ | ✅ |
-| genre | ✅ GENRE | ✅ TCON | ✅ ©gen | ✅ | ✅ | ✅ | ✅ |
-| track number | ✅ TRACKNUMBER | ✅ TRCK | ✅ trkn[n] | ❌ | ❌ | ❌ | ❌ |
-| total tracks | ✅ TOTALTRACKS | ❌ | ✅ trkn[1] | ❌ | ❌ | ❌ | ❌ |
+| title | ✅ | ✅ | ✅ ©nam | ✅ | ✅ | ✅ | ✅ |
+| artist | ✅ | ✅ | ✅ ©ART | ✅ | ✅ | ✅ | ✅ |
+| album | ✅ | ✅ | ✅ ©alb | ✅ | ✅ | ✅ | ✅ |
+| year | ✅ DATE | ✅ TDRC | ✅ ©day | ✅ | ✅ | ✅ | ✅ |
+| genre | ✅ | ✅ TCON | ✅ ©gen | ✅ | ✅ | ✅ | ✅ |
+| track number | ✅ TRACKNUMBER | ✅ TRCK | ✅ trkn | ❌ | ❌ | ❌ | ❌ |
+| total tracks | ✅ TOTALTRACKS | ❌ | ✅ trkn | ❌ | ❌ | ❌ | ❌ |
 | disc number | ✅ DISCNUMBER | ✅ TPOS | ❌ | ❌ | ❌ | ❌ | ❌ |
-| composer | ✅ COMPOSER | ❌ | ✅ ©wrt | ❌ | ❌ | ❌ | ❌ |
-| comment | ✅ COMMENT | ✅ COMM | ✅ ©cmt | ✅ | ✅ | ✅ | ✅ |
-| cover art | ✅ (Vorbis Picture) | ✅ (APIC) | ✅ covr atom | ❌ | ❌ | ❌ | ❌ |
+| composer | ✅ COMPOSER | ✅ TCOM | ✅ ©wrt | ❌ | ✅ | ✅ | ✅ |
+| comment | ✅ COMMENT | ✅ COMM | ✅ ©cmt | ❌ | ✅ | ✅ | ✅ |
+| cover art | ✅ | ✅ APIC | ✅ covr | ❌ | ❌ | ❌ | ❌ |
+
+**Legend:**
+- ✅ = implemented in Python layer (`embed_metadata.py`)
+- ❌ = not supported
+- Numbers in parentheses (`TRCK`) = actual ID3v2 frame / Vorbis key used
+
+---
+
+## Swift API Coverage
+
+The Swift `embedBatch(…)` method in `MetadataEmbedder.swift` currently exposes:
+
+```
+files: [(url: URL, title: String, trackNumber: Int)]
+artist: String
+album: String
+year: String
+genre: String
+comment: String?
+composer: String?
+discNumber: String?
+totalTracks: Int
+coverData: Data?
+```
+
+The following fields are **implemented in Python** but **not yet reachable** through the Swift API:
+
+| Field | Python support | Swift API reachable |
+|-------|--------------|-------------------|
+| album artist (`ALBUMARTIST` / `TPE2` / `©aART`) | ✅ | ❌ not plumbed |
+| TOTALTRACKS (MP3) | ❌ not representable in ID3v2 | n/a |
+
+---
 
 ## Implementation Notes
 
-### FLAC (Vorbis comments via mutagen)
-- `DATE` is the canonical year field; `YEAR` is set to the same value for compatibility only.
-- `ALBUMARTIST` is set independently of `ARTIST` — when a CUE provides a PERFORMER different from the track performer, both are written.
-- Cover art: embedded as Vorbis Picture block (type 3, "Cover (front)").
+### FLAC — mutagen Vorbis comments
+- `DATE` is the only year field written. `YEAR` is **not written** (confirmed by `testEmbedFLAC_duplicateYearNotWritten`).
+- `ALBUMARTIST` is present in the Python implementation but is never passed from Swift — the CUE parser does not distinguish track-level from album-level performer.
 
-### MP3 (ID3v2 via mutagen)
-- `TIT2` / `TPE1` / `TALB` / `TDRC` / `TCON` / `TRCK` for the standard fields.
-- `TPOS` for disc number (not part of TRCK; TRCK carries only track number).
-- `COMM` for comment; `TPE2` for album artist / composer.
-- Cover art: `APIC` frame with MIME type `image/jpeg`.
-- No native support for TOTALTRACKS in ID3v2 — `TRCK` carries `track/total` in some implementations but is not universally supported.
+### MP3 — mutagen ID3v2
+- `TIT2 / TPE1 / TALB / TDRC / TCON / TRCK / TPOS / TCOM / COMM` via frame class instances (required by mutagen ≥ 1.47).
+- `COMM` frame key serializes as `COMM::eng` (language suffix is part of the key).
+- TOTALTRACKS has no standard ID3v2 representation; only `TRCK` is written.
 
-### M4A / AAC / MP4 (iTunes-style atoms via mutagen)
-- `©nam / ©ART / ©alb / ©day / ©gen` for the standard fields.
-- `trkn` carries a tuple `(track, total)` as a single atom value.
-- `©aART` for album artist; `©wrt` for composer.
-- `covr` atom carries cover art as JPEG or PNG data.
-- **No disc number atom** in the standard iTunes tag set.
+### M4A — mutagen iTunes atoms
+- `©nam / ©ART / ©alb / ©day / ©gen / ©wrt / ©cmt` as free-form text atoms.
+- `trkn` carries `(track, total)` as a tuple; mutagen serializes it as `(N, M)` string.
+- `©aART` (album artist) is present in Python but not passed from Swift.
+- **No disc number atom** exists in the iTunes tag schema.
 
-### WAV (ffmpeg `-metadata`)
-- Metadata written via `ffmpeg -metadata key=value -codec copy`. No re-encoding.
-- WAV does not support embedded cover art — attempts are silently skipped with `SKIP:` output.
-- Track number and disc number are not supported by the WAV INFO chunk specification.
+### AIFF — mutagen ID3 chunk
+- Uses `AIFF(fpath)` + `add_tags()` + ID3 frame classes — not ffmpeg.
+- No cover art (mutagen AIFF + APIC combination is unreliable across players; silently skipped with `SKIP:`).
 
-### AIFF / ALAC
-- Same implementation as WAV — ffmpeg `-metadata` passthrough. No cover art.
+### OGG / Opus — mutagen Vorbis comments
+- `OggVorbis` / `OggOpus` used directly with `_set_vorbis` helper.
+- No cover art (OGG/Vorbis embedded pictures are format-dependent and not universally readable; silently skipped with `SKIP:`).
 
-### OGG / Opus
-- Same fallback as AIFF/ALAC — ffmpeg `-metadata` passthrough. Cover art via ffmpeg `-attach` is not currently implemented; unsupported formats fall through to `embed_ffmpeg`.
+### WAV — ffmpeg `-metadata`
+- `ffmpeg -codec copy -metadata key=value` only; no re-encoding.
+- Cover art not supported by the WAV INFO chunk spec; silently skipped with `SKIP:`.
 
-## Fallback Strategy
+---
 
-1. **Format-specific**: FLAC → mutagen FLAC; MP3 → mutagen ID3; M4A → mutagen MP4; WAV → ffmpeg.
-2. **Generic fallback**: any unrecognized extension falls through to `embed_ffmpeg` (ffmpeg `-codec copy -metadata …`).
-3. Fallback covers: AIFF, ALAC, OGG, Opus, and any container ffmpeg can handle.
-4. Cover art in fallback: **not supported**; silently skipped with `SKIP:` line.
+## Format Coverage in Tests
+
+| Format | End-to-end test | Notes |
+|--------|----------------|-------|
+| FLAC | ✅ `testEmbedFLAC_allFields`, `testEmbedFLAC_duplicateYearNotWritten` | Full field validation |
+| MP3 | ✅ `testEmbedMP3_allFields`, `testEmbedMP3_discNumberWrittenAsTPOS` | Full field validation |
+| M4A | ✅ `testEmbedM4A_allFields` | Full field validation |
+| AIFF | ❌ | Implementation exists; no E2E test yet |
+| OGG | ❌ | Implementation exists; no E2E test yet |
+| Opus | ❌ | Implementation exists; no E2E test yet |
+| WAV | ❌ | No E2E test yet |
+
+---
 
 ## Known Limitations
 
-- **MP3 TOTALTRACKS**: not representable in ID3v2 without using the `TRCK` frame's slash syntax (`TRCK=3/12`), which is inconsistently supported across players. Track number alone is written.
-- **M4A disc number**: no standard iTunes atom exists; this field cannot be written without extending to a non-standard atom.
-- **WAV / AIFF / OGG / Opus**: no cover art support in the current implementation.
+- **MP3 TOTALTRACKS**: not representable in ID3v2. `TRCK` carries only the track number.
+- **M4A disc number**: no standard iTunes atom exists in the schema.
+- **Album artist**: implemented in Python (`ALBUMARTIST`/`TPE2`/`©aART`) but the Swift `embedBatch` API does not currently accept or forward this field from CUE data.
+- **WAV / AIFF / OGG / Opus**: cover art is not supported and is silently skipped.
+- **AIFF / OGG / Opus**: have explicit mutagen implementations but lack end-to-end test coverage.
