@@ -9,8 +9,8 @@
 1. 读取整轨音频文件（支持 FLAC、MP3、WAV、AIFF、ALAC、M4A、AAC、OGG、Opus）及同名 `.cue` 曲目表
 2. 解析 CUE 中的曲目标题、艺人和时间码（自动识别 Big5 / CP950 / UTF-8 编码）
 3. 使用 `ffmpeg` 拆分为独立分轨文件（可保持原始格式，或通过 `--output-format` 转换为其他格式）
-4. 自动抓取并嵌入专辑封面（左岸音乐、MusicBrainz / Cover Art Archive）
-5. 写入完整元数据：标题、艺人、专辑、年份、风格、轨号、总轨数、封面图
+4. 自动抓取并嵌入专辑封面（同目录图片 → 文件内嵌封面 → MusicBrainz → iTunes，左岸音乐可选启用）
+5. 写入元数据（标题、艺人、专辑、年份、风格、轨号、总轨数、封面图；字段支持情况因格式而异，详见 METADATA_MATRIX.md）
 
 ## 环境要求
 
@@ -133,7 +133,7 @@ TrackSplitter/
 
 ## 已知限制
 
-- 封面抓取依赖左岸音乐和 MusicBrainz，部分冷门专辑可能抓取失败
+- 封面抓取按优先级尝试：同目录图片 → 文件内嵌封面 → MusicBrainz → iTunes；左岸音乐默认禁用（可通过配置启用）；冷门专辑可能在所有来源均无封面
 - WAV、AIFF、OGG、Opus 输出格式不支持嵌入封面（会优雅跳过）
 - 各输出格式的元数据字段支持情况不同，详见 [docs/METADATA_MATRIX.md](docs/METADATA_MATRIX.md)
 
