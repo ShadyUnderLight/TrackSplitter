@@ -17,61 +17,62 @@ struct TrackSplitterCLI {
         }
 
         // Parse --chapter-source
+        // Parse chapter source options.
+        // --chapter-source and --chapter-file are mutually exclusive.
+        // Each parses from already-filtered args so consumed options don't reappear.
         var chapterSourceArg: String?
+        var chapterFileArg: String?
         var filteredArgs = args
-        if let idx = args.firstIndex(of: "--chapter-source") {
-            guard idx + 1 < args.count else {
+
+        // --chapter-source
+        if let idx = filteredArgs.firstIndex(of: "--chapter-source") {
+            guard idx + 1 < filteredArgs.count else {
                 print("Error: --chapter-source requires a value (e.g. --chapter-source embedded)")
                 exit(1)
             }
-            chapterSourceArg = args[idx + 1]
-            var copy = args
-            copy.remove(at: idx + 1)
-            copy.remove(at: idx)
-            filteredArgs = copy
-        } else if let idx = args.firstIndex(where: { $0.hasPrefix("--chapter-source=") }) {
-            chapterSourceArg = String(args[idx].dropFirst("--chapter-source=".count))
-            var copy = args
-            copy.remove(at: idx)
-            filteredArgs = copy
+            chapterSourceArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--chapter-source=") }) {
+            chapterSourceArg = String(filteredArgs[idx].dropFirst("--chapter-source=".count))
+            filteredArgs.remove(at: idx)
         }
 
-        // Parse --chapter-file (alias for --chapter-source with explicit file path)
-        var chapterFileArg: String?
-        if let idx = args.firstIndex(of: "--chapter-file") {
-            guard idx + 1 < args.count else {
+        // --chapter-file (mutually exclusive with --chapter-source)
+        if let idx = filteredArgs.firstIndex(of: "--chapter-file") {
+            if chapterSourceArg != nil {
+                print("Error: --chapter-source and --chapter-file are mutually exclusive.")
+                exit(1)
+            }
+            guard idx + 1 < filteredArgs.count else {
                 print("Error: --chapter-file requires a path (e.g. --chapter-file /path/to/chapters.txt)")
                 exit(1)
             }
-            chapterFileArg = args[idx + 1]
-            var copy = args
-            copy.remove(at: idx + 1)
-            copy.remove(at: idx)
-            filteredArgs = copy
-        } else if let idx = args.firstIndex(where: { $0.hasPrefix("--chapter-file=") }) {
-            chapterFileArg = String(args[idx].dropFirst("--chapter-file=".count))
-            var copy = args
-            copy.remove(at: idx)
-            filteredArgs = copy
+            chapterFileArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--chapter-file=") }) {
+            if chapterSourceArg != nil {
+                print("Error: --chapter-source and --chapter-file are mutually exclusive.")
+                exit(1)
+            }
+            chapterFileArg = String(filteredArgs[idx].dropFirst("--chapter-file=".count))
+            filteredArgs.remove(at: idx)
         }
 
-        // Parse --output-format
+        // --output-format (always parsed from already-filtered list)
         var outputFormatArg: String?
-        if let idx = args.firstIndex(of: "--output-format") {
-            guard idx + 1 < args.count else {
+        if let idx = filteredArgs.firstIndex(of: "--output-format") {
+            guard idx + 1 < filteredArgs.count else {
                 print("Error: --output-format requires a value (e.g. --output-format mp3)")
                 exit(1)
             }
-            outputFormatArg = args[idx + 1]
-            var copy = args
-            copy.remove(at: idx + 1)
-            copy.remove(at: idx)
-            filteredArgs = copy
-        } else if let idx = args.firstIndex(where: { $0.hasPrefix("--output-format=") }) {
-            outputFormatArg = String(args[idx].dropFirst("--output-format=".count))
-            var copy = args
-            copy.remove(at: idx)
-            filteredArgs = copy
+            outputFormatArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--output-format=") }) {
+            outputFormatArg = String(filteredArgs[idx].dropFirst("--output-format=".count))
+            filteredArgs.remove(at: idx)
         }
 
         // Validate output format early
@@ -203,8 +204,9 @@ struct TrackSplitterCLI {
       tracksplitter <file> --output-format mp3      Re-encode output to MP3
 
     Chapter source options:
+      --chapter-source auto       Auto-detect CUE in the same directory (default)
       --chapter-source embedded   Read chapters from the input audio file (if any)
-      --chapter-source cue        Explicitly use CUE auto-detection (default)
+      --chapter-source cue        Explicit CUE sheet (via file picker)
       --chapter-file <path>       Use a chapter definition file:
                                    • .cue / .qcue  → CUE sheet
                                    • .meta / .ffmetadata → FFmpeg chapter file
