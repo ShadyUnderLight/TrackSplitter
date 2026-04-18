@@ -172,6 +172,12 @@ else:
     @Published var errorMessage: String = ""
     /// Selected output format for the split. nil = same as input.
     @Published var selectedOutputFormat: AudioSplitterOutputFormat = .keepOriginal
+    /// Custom output directory. nil = default (same dir as input).
+    @Published var customOutputDirectory: URL?
+    /// Filename template with placeholders: {index}, {title}, {artist}, {album}, {ext}
+    @Published var nameTemplate: String = "{index}. {title}.{ext}"
+    /// Overwrite policy.
+    @Published var overwritePolicy: AudioSplitter.OverwritePolicy = .rename
 
     // MARK: - Actions
     func load(audioURL: URL) {
@@ -230,8 +236,16 @@ else:
         Task {
             do {
                 let engine = TrackSplitterEngine(logHandler: handler)
-                let result = try await engine.process(inputURL: loaded.audioURL,
-                                                      outputFormat: selectedOutputFormat.audioFormat)
+                let outputConfig = TrackSplitterEngine.OutputConfig(
+                    outputDirectory: customOutputDirectory,
+                    nameTemplate: nameTemplate,
+                    overwritePolicy: overwritePolicy
+                )
+                let result = try await engine.process(
+                    inputURL: loaded.audioURL,
+                    outputFormat: selectedOutputFormat.audioFormat,
+                    outputConfig: outputConfig
+                )
                 let (coverData, _) = Completion.readCover(from: result.trackFiles)
                 let completion = Completion(
                     outputDirectory: result.outputDirectory,
@@ -262,6 +276,10 @@ else:
         progress = 0
         isShowingErrorAlert = false
         errorMessage = ""
+        selectedOutputFormat = .keepOriginal
+        customOutputDirectory = nil
+        nameTemplate = "{index}. {title}.{ext}"
+        overwritePolicy = .rename
     }
 
     // MARK: - Private

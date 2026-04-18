@@ -24,6 +24,27 @@ public actor TrackSplitterEngine {
         }
     }
 
+    /// 配置输出目录和文件名模板。
+    public struct OutputConfig: Sendable {
+        /// 输出目录。nil = 默认（与输入文件同目录，以 album title 为子目录）。
+        public var outputDirectory: URL?
+        /// 文件名模板，支持占位符：{index}、{title}、{artist}、{album}、{ext}
+        /// 默认值："{index}. {title}.{ext}"
+        public var nameTemplate: String
+        /// 覆写策略。
+        public var overwritePolicy: AudioSplitter.OverwritePolicy
+
+        public init(
+            outputDirectory: URL? = nil,
+            nameTemplate: String = "{index}. {title}.{ext}",
+            overwritePolicy: AudioSplitter.OverwritePolicy = .rename
+        ) {
+            self.outputDirectory = outputDirectory
+            self.nameTemplate = nameTemplate
+            self.overwritePolicy = overwritePolicy
+        }
+    }
+
     public struct Result: Sendable {
         public let outputDirectory: URL
         public let trackFiles: [URL]
@@ -60,7 +81,12 @@ public actor TrackSplitterEngine {
     ///   - outputFormat: Desired output format. nil = same as input (passthrough, no re-encode).
     ///     `.flac` = re-encode to FLAC (lossless, smaller file).
     ///     `.wav` = re-encode to WAV (lossless PCM, larger file).
-    public func process(inputURL: URL, outputFormat: AudioSplitter.AudioFormat? = nil) async throws -> Result {
+    ///   - outputConfig: Output directory, filename template, and overwrite policy.
+    public func process(
+        inputURL: URL,
+        outputFormat: AudioSplitter.AudioFormat? = nil,
+        outputConfig: OutputConfig? = nil
+    ) async throws -> Result {
         log("📂 Input: \(inputURL.lastPathComponent)")
 
         // 1. Find CUE — scan all .cue files in the same directory and validate via FILE field
@@ -88,15 +114,24 @@ public actor TrackSplitterEngine {
 
         guard !tracks.isEmpty else { throw EngineError.emptyTracks }
 
-        // 3. Create output directory
+        // 3. Resolve output directory
+        let cfg = outputConfig ?? OutputConfig()
         let albumDirName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
-        let outDir = inputURL.deletingLastPathComponent().appendingPathComponent(albumDirName)
+        let outDir: URL
+        if let customDir = cfg.outputDirectory {
+            outDir = customDir
+        } else {
+            outDir = inputURL.deletingLastPathComponent().appendingPathComponent(albumDirName)
+        }
         do {
             try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
             throw EngineError.outputDirCreationFailed
         }
         log("📁 Output dir: \(outDir.path)")
+        if cfg.outputDirectory != nil {
+            log("📁 (custom directory)")
+        }
 
         // 4. Fetch cover art (non-fatal)
         var coverData: Data? = nil
@@ -116,7 +151,10 @@ public actor TrackSplitterEngine {
                 file: inputURL,
                 tracks: tracks,
                 to: outDir,
-                outputFormat: outputFormat
+                outputFormat: outputFormat,
+                nameTemplate: cfg.nameTemplate,
+                albumTitle: albumTitle ?? albumDirName,
+                overwritePolicy: cfg.overwritePolicy
             ) { [weak self] progress in
                 Task { await self?.log("  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)...") }
             }

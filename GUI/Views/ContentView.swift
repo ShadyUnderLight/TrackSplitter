@@ -21,7 +21,10 @@ struct ContentView: View {
                 LoadedView(
                     loaded: loaded,
                     onStart: { viewModel.startProcessing() },
-                    selectedOutputFormat: $viewModel.selectedOutputFormat
+                    selectedOutputFormat: $viewModel.selectedOutputFormat,
+                    customOutputDirectory: $viewModel.customOutputDirectory,
+                    nameTemplate: $viewModel.nameTemplate,
+                    overwritePolicy: $viewModel.overwritePolicy
                 )
 
             case .processing:
@@ -40,7 +43,6 @@ struct ContentView: View {
                         )
                     },
                     onProcessAnother: {
-                        viewModel.selectedOutputFormat = .keepOriginal
                         viewModel.processAnother()
                     }
                 )
@@ -285,6 +287,11 @@ struct LoadedView: View {
     let loaded: SplitterViewModel.LoadedFiles
     let onStart: () -> Void
     @Binding var selectedOutputFormat: AudioSplitterOutputFormat
+    @Binding var customOutputDirectory: URL?
+    @Binding var nameTemplate: String
+    @Binding var overwritePolicy: AudioSplitter.OverwritePolicy
+
+    @State private var isShowingDirectoryPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -324,7 +331,8 @@ struct LoadedView: View {
 
             Divider()
 
-            HStack {
+            // Options row
+            HStack(spacing: 16) {
                 Text("CUE: \(loaded.cueURL.lastPathComponent)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -332,9 +340,72 @@ struct LoadedView: View {
 
                 Spacer()
 
+                // Output directory
+                HStack(spacing: 6) {
+                    Text("输出目录：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let dir = customOutputDirectory {
+                        Text(dir.lastPathComponent)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text("（默认）")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("选择...") {
+                        isShowingDirectoryPicker = true
+                    }
+                    .font(.caption)
+                    .buttonStyle(.link)
+
+                    if customOutputDirectory != nil {
+                        Button("清除") {
+                            customOutputDirectory = nil
+                        }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                    }
+                }
+
+                Divider().frame(height: 16)
+
+                // Filename template
+                HStack(spacing: 6) {
+                    Text("文件名：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("{index}. {title}", text: $nameTemplate)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(width: 180)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Divider().frame(height: 16)
+
+                // Overwrite policy
+                HStack(spacing: 6) {
+                    Text("冲突：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $overwritePolicy) {
+                        Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
+                        Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
+                        Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 90)
+                }
+
+                Divider().frame(height: 16)
+
                 // Output format selector
                 HStack(spacing: 8) {
-                    Text("输出格式：")
+                    Text("格式：")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -361,10 +432,21 @@ struct LoadedView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
             .background(Color(nsColor: .controlBackgroundColor))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .fileImporter(
+            isPresented: $isShowingDirectoryPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                customOutputDirectory = url
+            }
+            isShowingDirectoryPicker = false
+        }
     }
 }
 
