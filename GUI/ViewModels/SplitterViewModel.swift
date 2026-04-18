@@ -266,6 +266,15 @@ else:
     /// Resolved chapter source URL (set when user picks a file via NSOpenPanel).
     @Published var chapterSourceURL: URL? = nil
 
+    /// Custom output directory. nil = default (same dir as input, album-name subfolder).
+    @Published var customOutputDirectory: URL? = nil
+
+    /// Filename template with placeholders: {index}, {title}, {artist}, {album}, {ext}
+    @Published var nameTemplate: String = "{index}. {title}.{ext}"
+
+    /// Overwrite policy for existing files.
+    @Published var overwritePolicy: AudioSplitter.OverwritePolicy = .rename
+
     /// The currently running engine, if any. Used to support cancellation.
     private var activeEngine: TrackSplitterEngine?
 
@@ -331,9 +340,16 @@ else:
                 audioURL: loaded.audioURL,
                 fileURL: chapterSourceURL
             )
-            let outcome = await engine.process(inputURL: loaded.audioURL,
-                                               outputFormat: selectedOutputFormat.audioFormat,
-                                               chapterSource: chapterSource)
+            let outcome = await engine.process(
+                inputURL: loaded.audioURL,
+                outputFormat: selectedOutputFormat.audioFormat,
+                chapterSource: chapterSource,
+                outputConfig: TrackSplitterEngine.OutputConfig(
+                    outputDirectory: customOutputDirectory,
+                    nameTemplate: nameTemplate,
+                    overwritePolicy: overwritePolicy
+                )
+            )
 
             await MainActor.run {
                 self.progress = 1
@@ -378,6 +394,12 @@ else:
         isShowingErrorAlert = false
         errorMessage = ""
         activeEngine = nil
+        selectedOutputFormat = .keepOriginal
+        selectedChapterSourceType = .auto
+        chapterSourceURL = nil
+        customOutputDirectory = nil
+        nameTemplate = "{index}. {title}.{ext}"
+        overwritePolicy = .rename
     }
 
     // MARK: - Private

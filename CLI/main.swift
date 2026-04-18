@@ -75,6 +75,71 @@ struct TrackSplitterCLI {
             filteredArgs.remove(at: idx)
         }
 
+        // --output-dir (cumulative filter: operates on already-filtered list)
+        var outputDirArg: String?
+        if let idx = filteredArgs.firstIndex(of: "--output-dir") {
+            guard idx + 1 < filteredArgs.count else {
+                print("Error: --output-dir requires a path.")
+                exit(1)
+            }
+            outputDirArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--output-dir=") }) {
+            outputDirArg = String(filteredArgs[idx].dropFirst("--output-dir=".count))
+            filteredArgs.remove(at: idx)
+        }
+
+        // --name-template
+        var nameTemplateArg: String?
+        if let idx = filteredArgs.firstIndex(of: "--name-template") {
+            guard idx + 1 < filteredArgs.count else {
+                print("Error: --name-template requires a template string.")
+                exit(1)
+            }
+            nameTemplateArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--name-template=") }) {
+            nameTemplateArg = String(filteredArgs[idx].dropFirst("--name-template=".count))
+            filteredArgs.remove(at: idx)
+        }
+
+        // --overwrite
+        var overwriteArg: String?
+        if let idx = filteredArgs.firstIndex(of: "--overwrite") {
+            guard idx + 1 < filteredArgs.count else {
+                print("Error: --overwrite requires a policy (rename|overwrite|skip).")
+                exit(1)
+            }
+            overwriteArg = filteredArgs[idx + 1]
+            filteredArgs.remove(at: idx + 1)
+            filteredArgs.remove(at: idx)
+        } else if let idx = filteredArgs.firstIndex(where: { $0.hasPrefix("--overwrite=") }) {
+            overwriteArg = String(filteredArgs[idx].dropFirst("--overwrite=".count))
+            filteredArgs.remove(at: idx)
+        }
+
+        let overwritePolicy: AudioSplitter.OverwritePolicy
+        if let raw = overwriteArg {
+            switch raw.lowercased() {
+            case "rename": overwritePolicy = .rename
+            case "overwrite": overwritePolicy = .overwrite
+            case "skip": overwritePolicy = .skip
+            default:
+                print("Error: --overwrite must be one of: rename, overwrite, skip")
+                exit(1)
+            }
+        } else {
+            overwritePolicy = .rename
+        }
+
+        let outputConfig = TrackSplitterEngine.OutputConfig(
+            outputDirectory: outputDirArg.map { URL(fileURLWithPath: $0) },
+            nameTemplate: nameTemplateArg ?? "{index}. {title}.{ext}",
+            overwritePolicy: overwritePolicy
+        )
+
         // Validate output format early
         let outputFormat: AudioSplitter.AudioFormat?
         if let arg = outputFormatArg {
@@ -128,12 +193,17 @@ struct TrackSplitterCLI {
             chapterSource = nil  // auto-detect CUE
         }
 
-        await runCLI(audioPath: audioPath, outputFormat: outputFormat, chapterSource: chapterSource)
+        await runCLI(audioPath: audioPath, outputFormat: outputFormat, chapterSource: chapterSource, outputConfig: outputConfig)
     }
 
     // MARK: - CLI mode
 
-    private static func runCLI(audioPath: String, outputFormat: AudioSplitter.AudioFormat?, chapterSource: ChapterSource?) async {
+    private static func runCLI(
+        audioPath: String,
+        outputFormat: AudioSplitter.AudioFormat?,
+        chapterSource: ChapterSource?,
+        outputConfig: TrackSplitterEngine.OutputConfig
+    ) async {
         let audioURL = URL(fileURLWithPath: audioPath)
 
         guard FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -162,7 +232,12 @@ struct TrackSplitterCLI {
             print("Output format: passthrough (keeping original format)\n")
         }
 
-        let outcome = await engine.process(inputURL: audioURL, outputFormat: outputFormat, chapterSource: chapterSource)
+        let outcome = await engine.process(
+            inputURL: audioURL,
+            outputFormat: outputFormat,
+            chapterSource: chapterSource,
+            outputConfig: outputConfig
+        )
         switch outcome.status {
         case .success:
             guard let output = outcome.output else {
@@ -228,6 +303,12 @@ struct TrackSplitterCLI {
       --output-format <fmt>  Output format. Omit to keep original format (passthrough).
                               Valid: flac, mp3, wav, aiff, alac, m4a, aac, ogg, opus
 
+    Output options:
+      --output-dir <path>        Output directory (default: same dir as input)
+      --name-template <template> Filename template. Placeholders: {index}, {title}, {artist},
+                                 {album}, {ext}. Default: "{index}. {title}.{ext}"
+      --overwrite <policy>       rename (default) | overwrite | skip
+
     Metadata & cover art:
       Passthrough preserves all metadata. When re-encoding, some formats have
       limitations — see docs/METADATA_MATRIX.md.
@@ -237,6 +318,9 @@ struct TrackSplitterCLI {
       tracksplitter "/Users/music/album.flac" --chapter-source embedded
       tracksplitter "/Users/music/album.flac" --chapter-file chapters.txt
       tracksplitter "/Users/music/album.wav" --output-format flac
+      tracksplitter "album.flac" --output-dir ~/Desktop/tracks
+      tracksplitter "album.flac" --name-template "{index:02d} {title}.{ext}"
+      tracksplitter "album.flac" --overwrite skip
 
     Requirements:
       • ffmpeg    (brew install ffmpeg)

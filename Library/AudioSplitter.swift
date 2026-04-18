@@ -20,6 +20,13 @@ public actor AudioSplitter {
         }
     }
 
+    /// Policy for when an output file already exists.
+    public enum OverwritePolicy: String, Sendable {
+        case rename     // 重命名：已存在则加数字后缀（-1, -2, …）
+        case overwrite  // 直接覆盖
+        case skip       // 跳过（保留原文件，不调用 ffmpeg）
+    }
+
     /// Supported input audio formats.
     public enum AudioFormat: String, CaseIterable, Sendable {
         case flac = "flac"
@@ -117,6 +124,10 @@ public actor AudioSplitter {
         tracks: [CueTrack],
         to outputDir: URL,
         outputFormat: AudioFormat? = nil,
+        nameTemplate: String = "{index}. {title}.{ext}",
+        albumTitle: String = "",
+        artist: String = "",
+        overwritePolicy: OverwritePolicy = .rename,
         progressHandler: @escaping @Sendable (Progress) -> Void,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) async throws -> [URL] {
@@ -166,8 +177,14 @@ public actor AudioSplitter {
             }
 
             let duration = track.endSeconds! - track.startSeconds
-            let safe = sanitizeFilename(track.title.isEmpty ? "Track_\(track.index)" : track.title)
-            let outURL = outputDir.appendingPathComponent("\(track.index). \(safe).\(outExt)")
+            let rawName = applyNameTemplate(nameTemplate, track: track, albumTitle: albumTitle, artist: artist, ext: outExt)
+            let outURL = resolveOutputURL(outputDir: outputDir, baseName: rawName, policy: overwritePolicy)
+
+            // Handle skip: if file already exists, skip ffmpeg entirely
+            if overwritePolicy == .skip && FileManager.default.fileExists(atPath: outURL.path) {
+                outputs.append(outURL)
+                continue
+            }
 
             let progress = Progress(track: track.index, total: filled.count,
                                     trackTitle: track.title, secondsProcessed: track.startSeconds)
@@ -176,6 +193,7 @@ public actor AudioSplitter {
             // runFFmpeg returns the actual URL written (may differ if passthrough fell back to WAV)
             let actualURL = try await runFFmpeg(input: inputURL, start: track.startSeconds,
                                 duration: duration, output: outURL, acodecArgs: acodecArg,
+                                overwritePolicy: overwritePolicy,
                                 isCancelled: isCancelled, onFailureCleanup: {
                 try? FileManager.default.removeItem(at: outURL)
             })
@@ -193,15 +211,21 @@ public actor AudioSplitter {
         duration: Double,
         output: URL,
         acodecArgs: [String],
+        overwritePolicy: OverwritePolicy,
         isCancelled: @escaping @Sendable () -> Bool,
         onFailureCleanup: @escaping @Sendable () -> Void
     ) async throws -> URL {
         let isPassthrough = acodecArgs.first == "-acodec" && acodecArgs.last == "copy"
+        // .rename: file guaranteed absent by resolveOutputURL → safe to use -n
+        // .overwrite: user wants replacement → -y
+        // .skip: handled before calling runFFmpeg, never reaches here
+        let overwriteFlag = (overwritePolicy == .overwrite) ? "-y" : "-n"
 
         if isPassthrough {
             do {
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
                                         output: output, extraArgs: acodecArgs,
+                                        overwriteFlag: overwriteFlag,
                                         isCancelled: isCancelled, onFailureCleanup: {})
                 return output
             } catch {
@@ -211,6 +235,7 @@ public actor AudioSplitter {
                 let fallbackURL = output.deletingPathExtension().appendingPathExtension("wav")
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
                                         output: fallbackURL, extraArgs: ["-acodec", "pcm_s16le"],
+                                        overwriteFlag: overwriteFlag,
                                         isCancelled: isCancelled, onFailureCleanup: {})
                 return fallbackURL
             }
@@ -218,6 +243,7 @@ public actor AudioSplitter {
             do {
                 try await runFFmpegOnce(input: input, start: start, duration: duration,
                                         output: output, extraArgs: acodecArgs,
+                                        overwriteFlag: overwriteFlag,
                                         isCancelled: isCancelled, onFailureCleanup: {})
                 return output
             } catch {
@@ -235,6 +261,7 @@ public actor AudioSplitter {
         duration: Double,
         output: URL,
         extraArgs: [String],
+        overwriteFlag: String = "-y",
         isCancelled: @escaping @Sendable () -> Bool,
         onFailureCleanup: @escaping @Sendable () -> Void
     ) async throws {
@@ -243,7 +270,7 @@ public actor AudioSplitter {
             let (stdout, stderr, rc) = try await runner.runCollecting(
                 executable: ffmpegPath,
                 arguments: [
-                    "-y", "-i", input.path,
+                    overwriteFlag, "-i", input.path,
                     "-ss", String(format: "%.3f", start),
                     "-t",  String(format: "%.3f", duration)
                 ] + extraArgs + [output.path],
@@ -298,6 +325,45 @@ public actor AudioSplitter {
             candidate = baseDir.appendingPathComponent("\(safeName) (\(counter))")
             counter += 1
         } while FileManager.default.fileExists(atPath: candidate.path)
+        return candidate
+    }
+
+    /// Expand a filename template by replacing placeholders with track metadata.
+    /// Placeholders: {index}, {title}, {artist}, {album}, {ext}
+    private func applyNameTemplate(
+        _ template: String,
+        track: CueTrack,
+        albumTitle: String,
+        artist: String,
+        ext: String
+    ) -> String {
+        let title = sanitizeFilename(track.title.isEmpty ? "Track_\(track.index)" : track.title)
+        return template
+            .replacingOccurrences(of: "{index}", with: String(track.index))
+            .replacingOccurrences(of: "{title}", with: title)
+            .replacingOccurrences(of: "{artist}", with: sanitizeFilename(artist))
+            .replacingOccurrences(of: "{album}", with: sanitizeFilename(albumTitle))
+            .replacingOccurrences(of: "{ext}", with: ext)
+    }
+
+    /// Resolve the output URL by applying the overwrite policy.
+    /// - For `.rename`: appends -1, -2, … if the file already exists.
+    /// - For `.overwrite` / `.skip`: returns the base URL unchanged.
+    private func resolveOutputURL(
+        outputDir: URL,
+        baseName: String,
+        policy: OverwritePolicy
+    ) -> URL {
+        var candidate = outputDir.appendingPathComponent(baseName)
+        if policy == .rename {
+            var counter = 1
+            let nameWithoutExt = (baseName as NSString).deletingPathExtension
+            let ext = (baseName as NSString).pathExtension
+            while FileManager.default.fileExists(atPath: candidate.path) {
+                candidate = outputDir.appendingPathComponent("\(nameWithoutExt)-\(counter).\(ext)")
+                counter += 1
+            }
+        }
         return candidate
     }
 }

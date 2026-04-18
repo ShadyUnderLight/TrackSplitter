@@ -24,6 +24,27 @@ public actor TrackSplitterEngine {
         }
     }
 
+    /// Configuration for output directory and filename template.
+    public struct OutputConfig: Sendable {
+        /// Custom output directory. nil = default (same dir as input, album-name subfolder).
+        public var outputDirectory: URL?
+        /// Filename template with placeholders: {index}, {title}, {artist}, {album}, {ext}
+        /// Default: "{index}. {title}.{ext}"
+        public var nameTemplate: String
+        /// Overwrite policy for existing files.
+        public var overwritePolicy: AudioSplitter.OverwritePolicy
+
+        public init(
+            outputDirectory: URL? = nil,
+            nameTemplate: String = "{index}. {title}.{ext}",
+            overwritePolicy: AudioSplitter.OverwritePolicy = .rename
+        ) {
+            self.outputDirectory = outputDirectory
+            self.nameTemplate = nameTemplate
+            self.overwritePolicy = overwritePolicy
+        }
+    }
+
     /// Explicit outcome model for the entire process.
     /// Distinguishes complete success, partial success (split succeeded but metadata partially/fully failed),
     /// and complete failure (nothing usable was produced).
@@ -194,7 +215,8 @@ public actor TrackSplitterEngine {
     public func process(
         inputURL: URL,
         outputFormat: AudioSplitter.AudioFormat? = nil,
-        chapterSource: ChapterSource? = nil
+        chapterSource: ChapterSource? = nil,
+        outputConfig: OutputConfig? = nil
     ) async -> EngineOutcome {
         _isCancelled = false  // Reset cancellation for each new process run
         log("📂 Input: \(inputURL.lastPathComponent)")
@@ -307,10 +329,16 @@ public actor TrackSplitterEngine {
         }
 
         // 3. Create output directory (use sanitized name to avoid filesystem issues)
+        let cfg = outputConfig ?? OutputConfig()
         let albumDisplayName = albumTitle ?? inputURL.deletingPathExtension().lastPathComponent
         let albumSafeName = splitter.sanitizeDirectoryName(albumDisplayName)
-        let parentDir = inputURL.deletingLastPathComponent()
-        let outDir = splitter.resolveUniqueOutputDirectory(baseDir: parentDir, safeName: albumSafeName)
+        let outDir: URL
+        if let customDir = cfg.outputDirectory {
+            outDir = customDir
+        } else {
+            let parentDir = inputURL.deletingLastPathComponent()
+            outDir = splitter.resolveUniqueOutputDirectory(baseDir: parentDir, safeName: albumSafeName)
+        }
 
         if albumDisplayName != albumSafeName {
             log("🗂  Album display name: \"\(albumDisplayName)\" → filesystem: \"\(outDir.lastPathComponent)\"")
@@ -322,6 +350,9 @@ public actor TrackSplitterEngine {
             return .failure(message: EngineError.outputDirCreationFailed.localizedDescription)
         }
         log("📁 Output dir: \(outDir.path)")
+        if cfg.outputDirectory != nil {
+            log("📁 (custom directory)")
+        }
 
         // 4. Fetch cover art (non-fatal)
         var coverData: Data? = nil
@@ -341,7 +372,11 @@ public actor TrackSplitterEngine {
                 file: inputURL,
                 tracks: tracks,
                 to: outDir,
-                outputFormat: outputFormat
+                outputFormat: outputFormat,
+                nameTemplate: cfg.nameTemplate,
+                albumTitle: albumTitle ?? albumDisplayName,
+                artist: performer ?? "",
+                overwritePolicy: cfg.overwritePolicy
             ) { [weak self] progress in
                 guard let self else { return }
                 let message = "  Splitting track \(progress.track)/\(progress.total): \(progress.trackTitle)..."
