@@ -25,10 +25,17 @@ struct TrackSplitterCLI {
                 exit(1)
             }
             outputFormatArg = args[idx + 1]
-            filteredArgs = args.filter { $0 != "--output-format" && $0 != outputFormatArg }
+            // Remove exactly the --output-format flag and its value by index, not by value
+            var copy = args
+            copy.remove(at: idx + 1)
+            copy.remove(at: idx)
+            filteredArgs = copy
         } else if let idx = args.firstIndex(where: { $0.hasPrefix("--output-format=") }) {
             outputFormatArg = String(args[idx].dropFirst("--output-format=".count))
-            filteredArgs = args.filter { $0 != args[idx] }
+            // Remove exactly this argument by index
+            var copy = args
+            copy.remove(at: idx)
+            filteredArgs = copy
         }
 
         // Validate output format early
@@ -69,7 +76,7 @@ struct TrackSplitterCLI {
         let supported: Set<String> = ["flac", "mp3", "wav", "aiff", "alac", "m4a", "aac", "ogg", "opus"]
         guard supported.contains(audioURL.pathExtension.lowercased()) else {
             print("Error: Unsupported file format: \(audioURL.lastPathComponent)")
-            print("Supported: FLAC, MP3, WAV, AIFF, M4A, AAC, OGG, Opus")
+            print("Supported: FLAC, MP3, WAV, AIFF, ALAC, M4A, AAC, OGG, Opus")
             exit(1)
         }
 
