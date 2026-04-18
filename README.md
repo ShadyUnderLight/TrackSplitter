@@ -41,6 +41,7 @@ ln -s ~/.swift/projects/TrackSplitter/.build/arm64-apple-macosx/release/trackspl
 
 ```bash
 tracksplitter "/path/to/陈升-别让我哭.flac"
+tracksplitter "/path/to/陈升-别让我哭.flac" --output-format mp3
 ```
 
 工具会在 FLAC 文件同目录下查找同名 `.cue` 文件，输出到以专辑名命名的子文件夹中。
@@ -52,6 +53,24 @@ tracksplitter "/path/to/陈升-别让我哭.flac"
   ├── 03. Vivien.flac
   └── ...
 ```
+
+### 输出格式
+
+默认保持原始格式（passthrough，无重编码）。可用 `--output-format` 指定输出格式：
+
+| 格式 | 说明 | 备注 |
+|------|------|------|
+| flac | 无损压缩 | 元数据全覆盖 |
+| mp3 | 有损压缩 | 元数据全覆盖，通用性最强 |
+| wav | 无压缩 | 不支持封面 |
+| aiff | Apple 无压缩 | 封面支持不稳定 |
+| alac | Apple 无损（.m4a） | 封面支持不稳定 |
+| m4a | AAC 音频 | 元数据全覆盖 |
+| aac | AAC 音频（.aac） | 封面支持不稳定 |
+| ogg | OGG Vorbis | 封面支持不稳定 |
+| opus | Opus | 封面支持不稳定 |
+
+元数据和封面支持详情参见 [docs/METADATA_MATRIX.md](docs/METADATA_MATRIX.md)。
 
 ## 项目结构
 
