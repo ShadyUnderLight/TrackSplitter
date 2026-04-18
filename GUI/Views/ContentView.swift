@@ -339,11 +339,17 @@ struct LoadedView: View {
 
                     Picker("", selection: $selectedOutputFormat) {
                         ForEach(AudioSplitterOutputFormat.allCases) { fmt in
-                            Text(fmt.displayName).tag(fmt)
+                            Text(fmt.formatDescription).tag(fmt)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
+                    .frame(width: 320)
+
+                    if let caveat = selectedOutputFormat.caveat {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                            .help(caveat)
+                    }
                 }
 
                 Button(action: onStart) {

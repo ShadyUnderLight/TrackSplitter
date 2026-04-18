@@ -6,17 +6,63 @@ import Combine
 public enum AudioSplitterOutputFormat: String, CaseIterable, Identifiable {
     case keepOriginal = ""
     case flac = "flac"
+    case mp3 = "mp3"
     case wav = "wav"
+    case aiff = "aiff"
+    case alac = "alac"
+    case m4a = "m4a"
+    case aac = "aac"
+    case ogg = "ogg"
+    case opus = "opus"
 
     public var id: String { rawValue }
 
+    /// Short display name for use in compact pickers.
     public var displayName: String {
         switch self {
         case .keepOriginal: return "保持原格式"
         case .flac: return "FLAC"
+        case .mp3: return "MP3"
         case .wav: return "WAV"
+        case .aiff: return "AIFF"
+        case .alac: return "ALAC"
+        case .m4a: return "M4A"
+        case .aac: return "AAC"
+        case .ogg: return "OGG"
+        case .opus: return "Opus"
         }
     }
+
+    /// Human-readable description of this format's characteristics.
+    public var formatDescription: String {
+        switch self {
+        case .keepOriginal: return "保持原始格式（最快，无重编码）"
+        case .flac: return "无损压缩，兼容性好"
+        case .mp3: return "有损压缩，体积小，兼容性最强"
+        case .wav: return "无压缩，体积大，通用支持"
+        case .aiff: return "Apple 无压缩格式"
+        case .alac: return "Apple 无损格式（.m4a）"
+        case .m4a: return "AAC 音频（.m4a）"
+        case .aac: return "AAC 音频（.aac）"
+        case .ogg: return "OGG Vorbis，开源有损"
+        case .opus: return "Opus，开放高效"
+        }
+    }
+
+    /// Caveats or limitations for this format (metadata / cover art), or nil if none.
+    public var caveat: String? {
+        switch self {
+        case .keepOriginal, .flac, .mp3, .m4a: return nil
+        case .wav: return "WAV 不支持嵌入封面"
+        case .aiff: return "AIFF 封面支持不稳定"
+        case .alac: return "ALAC 封面支持不稳定"
+        case .aac: return "AAC 封面支持不稳定"
+        case .ogg, .opus: return "OGG/Opus 封面支持不稳定"
+        }
+    }
+
+    /// Whether this format uses re-encoding (vs passthrough).
+    public var isPassthrough: Bool { self == .keepOriginal }
 
     /// Convert to AudioSplitter.AudioFormat for engine call, or nil for passthrough.
     public var audioFormat: AudioSplitter.AudioFormat? {
