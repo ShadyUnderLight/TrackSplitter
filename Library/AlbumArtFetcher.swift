@@ -174,7 +174,8 @@ public actor AlbumArtFetcher {
 
     /// Wrapper that runs a provider with timeout and returns a structured result.
     /// On success, the data is stored in cache before the result is returned.
-    private func attempt(
+    /// internal for testing; production callers should use the public `fetch()` method.
+    func attempt(
         provider: any CoverProvider,
         artist: String?,
         album: String,
@@ -185,32 +186,41 @@ public actor AlbumArtFetcher {
 
             struct TimeoutError: Error {}
 
-            let fetchedData: Data? = try await withThrowingTaskGroup(of: Data?.self) { group in
+            // Use Result<Data?, Error> so nil (no cover found at this source) is a
+            // valid success value, not a continuation of the loop. Only timeout's
+            // throw reaches the catch block as .error.
+            let result = try await withThrowingTaskGroup(of: Result<Data?, Error>.self) { (group: inout ThrowingTaskGroup<Result<Data?, Error>, Error>) in
                 // Timeout task — throws to stop the group
-                group.addTask {
+                group.addTask { @Sendable in
                     try await Task.sleep(nanoseconds: timeoutNanos)
                     throw TimeoutError()
                 }
-                // Provider task
-                group.addTask {
-                    try await provider.fetch(artist: artist, album: album, inputFile: inputFile)
+                // Provider task — nil means "no cover at this source", not an error
+                group.addTask { @Sendable in
+                    let data = try await provider.fetch(artist: artist, album: album, inputFile: inputFile)
+                    return Result<Data?, Error>.success(data)
                 }
 
-                // Return first non-nil result; propagate nil as "not found"
-                for try await result in group {
-                    if let d = result {
-                        return d
-                    }
-                }
-                return nil
+                // First completed task wins
+                guard let r = try await group.next() else { return Result<Data?, Error>.success(nil) }
+                // Cancel remaining work — we already have our answer
+                group.cancelAll()
+                return r
             }
 
-            if let data = fetchedData {
+            // Interpret result
+            switch result {
+            case .success(let data?):
+                // Found a cover
                 let key = CoverCache.CacheKey(artist: artist, album: album)
                 await cache.set(key, data: data)
                 return .success(providerName: provider.name, sizeBytes: data.count)
-            } else {
+            case .success(nil):
+                // Provider returned nil — not an error, just "not found at this source"
                 return .notFound(providerName: provider.name)
+            case .failure(let err):
+                // Timeout or provider threw — propagate as error
+                throw err
             }
         } catch {
             // Timeout or provider error
