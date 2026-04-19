@@ -48,19 +48,18 @@ final class ProcessRunnerTests: XCTestCase {
 
     func testCancellationThrowsCancelledError() async throws {
         let runner = ProcessRunner(timeoutSeconds: nil)
-        let cancelled = UnsafeBool(false)
+        let cancelFlag = TestCancelFlag()
 
-        // Start a task that will flip cancelled=true after 50ms
         Task {
             try? await Task.sleep(nanoseconds: 50_000_000)
-            cancelled.value = true
+            cancelFlag.cancel()
         }
 
         do {
             _ = try await runner.run(
                 executable: "/bin/sleep",
                 arguments: ["10"],
-                isCancelled: { cancelled.value }
+                isCancelled: { cancelFlag.isCancelled() }
             )
             XCTFail("Expected cancelled error")
         } catch let error as ProcessRunnerError {
@@ -87,10 +86,113 @@ final class ProcessRunnerTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Subprocess cleanup guarantees (issue #53)
+
+    func testTimeoutTerminatesSubprocessBeforeReturning() async throws {
+        // Write a script that sleeps and writes its PID to a temp file.
+        // After ProcessRunner times out and returns, verify the PID is dead.
+        let pidFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sleep_pid_\(UUID().uuidString).txt")
+        let scriptFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wait_signal_\(UUID().uuidString).sh")
+
+        let script = """
+        echo $$ > '\(pidFile.path)'
+        sleep 30
+        """
+        try script.write(to: scriptFile, atomically: true, encoding: .utf8)
+
+        let runner = ProcessRunner(timeoutSeconds: 0.3)
+        do {
+            _ = try await runner.run(executable: "/bin/bash", arguments: [scriptFile.path])
+            XCTFail("Expected timeout")
+        } catch let error as ProcessRunnerError {
+            XCTAssertTrue(error is ProcessRunnerError)
+        }
+
+        // Verify subprocess is dead after the runner returns
+        if FileManager.default.fileExists(atPath: pidFile.path) {
+            let pidStr = try String(contentsOf: pidFile, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let pid = pid_t(pidStr) {
+                let alive = kill(pid, 0) == 0
+                XCTAssertFalse(alive, "Subprocess should be dead after timeout; PID \(pid) still alive")
+            }
+        }
+
+        try? FileManager.default.removeItem(at: pidFile)
+        try? FileManager.default.removeItem(at: scriptFile)
+    }
+
+    func testCancellationTerminatesSubprocessBeforeReturning() async throws {
+        let pidFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sleep_pid_\(UUID().uuidString).txt")
+        let scriptFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wait_signal_\(UUID().uuidString).sh")
+
+        let script = """
+        echo $$ > '\(pidFile.path)'
+        sleep 30
+        """
+        try script.write(to: scriptFile, atomically: true, encoding: .utf8)
+
+        let cancelFlag = TestCancelFlag()
+        let runner = ProcessRunner(timeoutSeconds: nil)
+
+        Task {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            cancelFlag.cancel()
+        }
+
+        do {
+            _ = try await runner.run(
+                executable: "/bin/bash",
+                arguments: [scriptFile.path],
+                isCancelled: { cancelFlag.isCancelled() }
+            )
+            XCTFail("Expected cancelled error")
+        } catch let error as ProcessRunnerError {
+            if case .cancelled = error {
+                // Expected
+            } else {
+                XCTFail("Expected cancelled, got \(error)")
+            }
+        }
+
+        // Verify subprocess is dead after the runner returns
+        if FileManager.default.fileExists(atPath: pidFile.path) {
+            let pidStr = try String(contentsOf: pidFile, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let pid = pid_t(pidStr) {
+                let alive = kill(pid, 0) == 0
+                XCTAssertFalse(alive, "Subprocess should be dead after cancellation; PID \(pid) still alive")
+            }
+        }
+
+        try? FileManager.default.removeItem(at: pidFile)
+        try? FileManager.default.removeItem(at: scriptFile)
+    }
+
+    // NOTE: cleanupOnFailure is a pre-existing unused feature (defined but never called
+    // in ProcessRunner). Testing it is out of scope for issue #53 which focuses on
+    // subprocess termination guarantees after timeout/cancellation.
 }
 
-/// A plain mutable bool for test use. Not thread-safe — name reflects that.
-private final class UnsafeBool {
-    var value: Bool
-    init(_ value: Bool) { self.value = value }
+/// A simple thread-safe bool for test use.
+private final class TestCancelFlag: @unchecked Sendable {
+    private var _cancelled = false
+    private let _lock = NSLock()
+
+    func isCancelled() -> Bool {
+        _lock.lock()
+        defer { _lock.unlock() }
+        return _cancelled
+    }
+
+    func cancel() {
+        _lock.lock()
+        defer { _lock.unlock() }
+        _cancelled = true
+    }
 }
