@@ -121,10 +121,12 @@ public struct TextChapterParser: Sendable {
 
     /// Parse a timestamp from a line and return the seconds value + remainder of line.
     private func parseTimestampLine(_ line: String) -> (seconds: Double, rest: String)? {
-        // Supported formats:
-        //   00:00:00 Title
-        //   [00:00:00] Title
-        //   00:00:00.500 Title
+        // Supported formats (semantics are explicit — do not mix):
+        //   MM:SS           → minutes:seconds  (e.g. 03:45 = 3 min 45 sec)
+        //   HH:MM:SS        → hours:minutes:seconds  (e.g. 1:02:03 = 1h 2m 3s)
+        //   HH:MM:SS.mmm    → hours:minutes:seconds.subseconds  (e.g. 00:03:45.500 = 3m 45.5s)
+        //   [MM:SS] Title
+        //   [HH:MM:SS] Title
         var work = line.trimmingCharacters(in: .whitespaces)
 
         var rest = ""
@@ -132,10 +134,8 @@ public struct TextChapterParser: Sendable {
         // Strip matched [ ... ] pair and preserve anything after the closing ]
         if work.hasPrefix("[") {
             if let endBracket = work.firstIndex(of: "]") {
-                // textAfter = everything after the closing ]
                 let afterBracket = work.index(after: endBracket)
                 rest = String(work[afterBracket...]).trimmingCharacters(in: .whitespaces)
-                // work = content inside brackets
                 work = String(work[work.index(after: work.startIndex)..<endBracket])
             }
         }
@@ -145,18 +145,30 @@ public struct TextChapterParser: Sendable {
         guard let first = parts.first else { return nil }
         let tsString = String(first)
 
-        // Parse H:M:S[.f]
         let tsComponents = tsString.split(separator: ":")
         guard tsComponents.count == 2 || tsComponents.count == 3 else { return nil }
 
-        guard let hours = Double(tsComponents[0]),
-              let minutes = Double(tsComponents[1]) else { return nil }
+        var totalSeconds: Double = 0
 
-        var totalSeconds: Double = minutes * 60 + hours * 3600
-
-        if tsComponents.count == 3 {
-            guard let sec = Double(tsComponents[2]) else { return nil }
-            totalSeconds += sec
+        if tsComponents.count == 2 {
+            // MM:SS format — first component is minutes, second is seconds
+            guard let mm = Double(tsComponents[0]),
+                  let ss = Double(tsComponents[1]) else { return nil }
+            totalSeconds = mm * 60 + ss
+        } else {
+            // HH:MM:SS[.mmm] format — third component may have subseconds
+            guard let hh = Double(tsComponents[0]),
+                  let mm = Double(tsComponents[1]) else { return nil }
+            let secStr = String(tsComponents[2])
+            // Support fractional seconds: split on "." if present
+            let secComponents = secStr.split(separator: ".", maxSplits: 1)
+            guard let sec = Double(secComponents[0]) else { return nil }
+            totalSeconds = hh * 3600 + mm * 60 + sec
+            if secComponents.count == 2 {
+                // Fractional part: ".500" → 0.5 seconds
+                let frac = Double("0." + String(secComponents[1])) ?? 0
+                totalSeconds += frac
+            }
         }
 
         // If no rest was extracted from the [bracket] form, use the remainder from work.split
