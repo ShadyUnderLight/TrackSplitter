@@ -175,6 +175,34 @@ final class AlbumArtFetcherPipelineTests: XCTestCase {
     }
 }
 
+// MARK: - AlbumArtFetcher attempt() tests (issue #52)
+
+/// Tests that provider returning nil is treated as .notFound, not .error.
+final class AlbumArtFetcherAttemptTests: XCTestCase {
+    func testProviderReturningNilGivesNotFound() async throws {
+        let fetcher = AlbumArtFetcher(cache: CoverCache(), config: .init())
+        let provider = MockNotFoundProvider(name: "NotFound")
+        let result = await fetcher.attempt(provider: provider, artist: nil, album: "Test", inputFile: nil)
+        XCTAssertEqual(result.status, .notFound)
+    }
+
+    func testProviderThrowingGivesError() async throws {
+        let fetcher = AlbumArtFetcher(cache: CoverCache(), config: .init())
+        let provider = MockErrorProvider(name: "Error")
+        let result = await fetcher.attempt(provider: provider, artist: nil, album: "Test", inputFile: nil)
+        XCTAssertEqual(result.status, .error)
+    }
+
+    func testProviderReturningDataGivesSuccess() async throws {
+        let fetcher = AlbumArtFetcher(cache: CoverCache(), config: .init())
+        let data = Data([0xFF, 0xD8, 0xFF, 0xE0])
+        let provider = MockSuccessProvider(name: "Success", data: data)
+        let result = await fetcher.attempt(provider: provider, artist: nil, album: "Test", inputFile: nil)
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.sizeBytes, data.count)
+    }
+}
+
 // MARK: - ProviderResult Tests
 
 final class ProviderResultTests: XCTestCase {
