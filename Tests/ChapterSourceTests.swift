@@ -40,6 +40,56 @@ final class ChapterSourceTests: XCTestCase {
         XCTAssertEqual(entries[2].startSeconds, 450)
     }
 
+    func testTextChapterParser_MMSS_semantics() throws {
+        // Issue #55: 03:45 must be interpreted as 3 minutes 45 seconds (=225s),
+        // NOT 3 hours 45 minutes (=13500s).
+        let file = tempDir.appendingPathComponent("chapters.txt")
+        try "03:45 Title\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let parser = TextChapterParser()
+        let entries = try parser.parse(at: file)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].startSeconds, 225)  // 3*60 + 45 = 225
+        XCTAssertEqual(entries[0].title, "Title")
+    }
+
+    func testTextChapterParser_HHMMSSSemantics() throws {
+        // 1:02:03 = 1h 02m 03s = 3723s
+        let file = tempDir.appendingPathComponent("chapters.txt")
+        try "1:02:03 Title\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let parser = TextChapterParser()
+        let entries = try parser.parse(at: file)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].startSeconds, 3723)  // 1*3600 + 2*60 + 3
+    }
+
+    func testTextChapterParser_bracketMMSS() throws {
+        // [03:45] = 3 minutes 45 seconds = 225s (MM:SS inside brackets)
+        let file = tempDir.appendingPathComponent("chapters.txt")
+        try "[03:45] Title\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let parser = TextChapterParser()
+        let entries = try parser.parse(at: file)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].startSeconds, 225)
+    }
+
+    func testTextChapterParser_subseconds() throws {
+        // 00:03:45.500 = 3m 45.5s = 225.5s
+        let file = tempDir.appendingPathComponent("chapters.txt")
+        try "00:03:45.500 Title\n".write(to: file, atomically: true, encoding: .utf8)
+
+        let parser = TextChapterParser()
+        let entries = try parser.parse(at: file)
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].startSeconds, 225.5, accuracy: 0.001)
+    }
+
     func testTextChapterParser_dashSeparator() throws {
         let file = tempDir.appendingPathComponent("chapters.txt")
         try """
