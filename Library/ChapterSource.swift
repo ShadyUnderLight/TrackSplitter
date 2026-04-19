@@ -328,7 +328,8 @@ public struct EmbeddedChapterReader: Sendable {
             url.path
         ]
 
-        let output = try await runProcess(executable: ffprobePath, arguments: args)
+        let runner = ProcessRunner(timeoutSeconds: 5.0)
+        let output = try await runner.run(executable: ffprobePath, arguments: args)
 
         return try parseFfprobeJSON(output, url: url)
     }
@@ -365,34 +366,29 @@ public struct EmbeddedChapterReader: Sendable {
         return entries
     }
 
+    /// Locate ffprobe on the filesystem and return its absolute path.
+    /// Throws ffprobeNotFound if ffprobe is not found in any expected location.
     private static func ffprobePath() throws -> String {
-        let candidates = ["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "/usr/bin/ffprobe", "ffprobe"]
+        let candidates = [
+            "/opt/homebrew/bin/ffprobe",
+            "/usr/local/bin/ffprobe",
+            "/usr/bin/ffprobe",
+            "/bin/ffprobe"
+        ]
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
                 return path
             }
         }
-        // Last resort — let shell resolve
-        return "ffprobe"
-    }
-
-    private func runProcess(executable: String, arguments: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: executable)
-            proc.arguments = arguments
-            let pipe = Pipe()
-            proc.standardOutput = pipe
-            proc.standardError = FileHandle.nullDevice
-            do {
-                try proc.run()
-                proc.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                continuation.resume(returning: output)
-            } catch {
-                continuation.resume(throwing: error)
+        // Try PATH lookup — find ffprobe via explicit path search
+        let pathEnv = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        let pathDirs = pathEnv.components(separatedBy: ":")
+        for dir in pathDirs {
+            let fullPath = (dir as NSString).appendingPathComponent("ffprobe")
+            if FileManager.default.isExecutableFile(atPath: fullPath) {
+                return fullPath
             }
         }
+        throw Error.ffprobeNotFound
     }
 }
