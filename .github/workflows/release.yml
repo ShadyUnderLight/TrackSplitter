@@ -19,6 +19,9 @@ jobs:
           echo "build_num=$BUILD_NUM" >> $GITHUB_OUTPUT
         id: build_num
 
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
       - name: Generate Xcode project
         run: xcodegen generate --spec GUI/project.yml --project GUI/
 
