@@ -232,17 +232,17 @@ public actor AlbumArtFetcher {
     private func buildPipeline() -> [any CoverProvider] {
         var providers: [any CoverProvider] = []
 
-        // 1. Local directory image (always first — no network, deterministic)
-        providers.append(LocalDirectoryCoverProvider())
-
-        // 2. Embedded album art in the input audio file
+        // 1. Embedded album art in the input audio file
         providers.append(EmbeddedCoverProvider())
 
-        // 3. MusicBrainz / Cover Art Archive (reliable API)
+        // 2. MusicBrainz / Cover Art Archive (reliable API)
         providers.append(MusicBrainzCoverProvider())
 
-        // 4. iTunes Search API (reliable)
+        // 3. iTunes Search API (reliable)
         providers.append(ITunesCoverProvider())
+
+        // 4. Local directory image (no network, but heuristic — may not be the intended album art)
+        providers.append(LocalDirectoryCoverProvider())
 
         // 5. LeftFM web scraping (fragile, HTTP, best-effort — opt-in only)
         if config.enableLeftFM {
