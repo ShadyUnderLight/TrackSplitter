@@ -73,7 +73,7 @@ tracksplitter "/path/to/album.flac" --chapter-file /path/to/chapters.txt
 |------|------|
 | `--chapter-source auto` | 自动检测同目录 .cue 文件（默认） |
 | `--chapter-source embedded` | 读取音频文件内嵌章节标记 |
-| `--chapter-source cue` | 通过文件选择器指定 CUE 文件 |
+| `--chapter-source cue` | 等同 `auto`，自动检测同目录 CUE 文件 |
 | `--chapter-file <path>` | 指定章节定义文件（见下节）|
 
 ### 章节文件格式
@@ -98,7 +98,7 @@ CHAPTER0001=00:03:45.000
 CHAPTER0001NAME=Track 2 Title
 ```
 
-**CUE / QCOW 格式**：`.cue` / `.qcue` 文件
+**CUE / QCUE 格式**：`.cue` / `.qcue` 文件
 
 ### 输出格式
 
