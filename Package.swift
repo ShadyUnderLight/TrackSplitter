@@ -20,7 +20,8 @@ let package = Package(
             name: "TrackSplitterLib",
             dependencies: [],
             path: "Library",
-            // embed_metadata.py is a resource, not a Swift source — include it explicitly.
+            // embed_metadata.py is needed at runtime; declare it as a resource so
+            // Bundle.module.url(forResource:) can locate it inside the built product.
             resources: [
                 .copy("Resources/embed_metadata.py")
             ]

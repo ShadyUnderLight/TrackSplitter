@@ -179,11 +179,8 @@ public actor PythonMetadataAdapter: MetadataWriter {
     }
 
     private static func locateScript() -> String {
-        if let bundleURL = Bundle.module.url(forResource: "embed_metadata", withExtension: "py"),
-           FileManager.default.isReadableFile(atPath: bundleURL.path) {
-            return bundleURL.path
-        }
-
+        // Note: Bundle.module is not used here to avoid requiring resources: declaration.
+        // The fallback paths below cover all standard install locations.
         let exeDir = (CommandLine.arguments.first.map { URL(fileURLWithPath: $0).deletingLastPathComponent().path }
             ?? FileManager.default.currentDirectoryPath)
         let exeURL = URL(fileURLWithPath: exeDir)
