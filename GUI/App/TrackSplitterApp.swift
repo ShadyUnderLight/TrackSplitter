@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "TrackSplitter"
-        window.minSize = NSSize(width: 640, height: 480)
+        window.minSize = NSSize(width: 640, height: 560)
         window.backgroundColor = .windowBackgroundColor
         window.contentViewController = hostingController  // 用 contentViewController 而非直接设置 contentView
         window.center()

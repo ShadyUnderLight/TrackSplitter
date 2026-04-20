@@ -61,7 +61,7 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 640, minHeight: 480)
+        .frame(minWidth: 640, minHeight: 560)
         .onReceive(NotificationCenter.default.publisher(for: .didSelectFlacFile)) { notification in
             if let url = notification.object as? URL {
                 viewModel.load(audioURL: url)
@@ -78,7 +78,7 @@ final class IdleViewController: NSViewController {
     private var dropZoneView: DropZoneVisualView!
 
     override func loadView() {
-        self.view = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 480))
+        self.view = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 560))
         self.view.wantsLayer = true
     }
 
@@ -304,7 +304,8 @@ struct LoadedView: View {
 
 
     var body: some View {
-        VStack(spacing: 0) {
+        ScrollView {
+            VStack(spacing: 0) {
             HStack(spacing: 16) {
                 Image(systemName: "music.note")
                     .font(.title2)
@@ -337,7 +338,7 @@ struct LoadedView: View {
             Divider()
 
             TrackListView(tracks: loaded.tracks)
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: 280)
 
             Divider()
 
@@ -469,7 +470,7 @@ struct LoadedView: View {
             .padding(20)
             .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
         .onChange(of: selectedChapterSourceType) { newValue in
             if !newValue.requiresFile {
                 // Switching to auto or embedded — clear any previously picked file
