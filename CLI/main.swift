@@ -281,7 +281,7 @@ struct TrackSplitterCLI {
     Chapter source options:
       --chapter-source auto       Auto-detect CUE in the same directory (default)
       --chapter-source embedded   Read chapters from the input audio file (if any)
-      --chapter-source cue        Explicit CUE sheet (via file picker)
+      --chapter-source cue        Alias for auto (CUE auto-detection)
       --chapter-file <path>       Use a chapter definition file:
                                    • .cue / .qcue  → CUE sheet
                                    • .meta / .ffmetadata → FFmpeg chapter file
