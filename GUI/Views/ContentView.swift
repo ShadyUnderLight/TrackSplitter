@@ -288,6 +288,179 @@ struct IdleView: NSViewControllerRepresentable {
     }
 }
 
+// MARK: - LoadedBottomBar
+/// Fixed bottom bar: primary action button is always visible, never scrolled out of view.
+struct LoadedBottomBar: View {
+    let onStart: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Button(action: onStart) {
+                HStack(spacing: 6) {
+                    Image(systemName: "scissors")
+                    Text("开始拆分")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 10)
+                .background(Color.accentColor)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+}
+
+// MARK: - LoadedConfigBar
+/// Mid-level config bar: chapter source, output directory, filename template, overwrite policy, output format.
+struct LoadedConfigBar: View {
+    @Binding var selectedChapterSourceType: ChapterSourceType
+    @Binding var chapterSourceURL: URL?
+    @Binding var customOutputDirectory: URL?
+    @Binding var nameTemplate: String
+    @Binding var overwritePolicy: AudioSplitter.OverwritePolicy
+    @Binding var selectedOutputFormat: AudioSplitterOutputFormat
+
+    @State private var isShowingDirectoryPicker = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Chapter source
+            HStack(spacing: 6) {
+                Text("分割依据：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $selectedChapterSourceType) {
+                    ForEach(ChapterSourceType.allCases) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .frame(width: 200)
+                .fixedSize()
+
+                if selectedChapterSourceType.requiresFile {
+                    if let url = chapterSourceURL {
+                        Text(url.lastPathComponent)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 120)
+                    } else {
+                        Text("（未选择文件）")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            Divider().frame(height: 16)
+
+            // Output directory
+            HStack(spacing: 4) {
+                Text("目录：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let dir = customOutputDirectory {
+                    Text(dir.lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 80)
+                } else {
+                    Text("（默认）")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("选择...") {
+                    isShowingDirectoryPicker = true
+                }
+                .font(.caption)
+                .buttonStyle(.link)
+                if customOutputDirectory != nil {
+                    Button("清除") {
+                        customOutputDirectory = nil
+                    }
+                    .font(.caption)
+                    .buttonStyle(.link)
+                }
+            }
+
+            Divider().frame(height: 16)
+
+            // Filename template
+            HStack(spacing: 4) {
+                Text("文件名：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("{index}. {title}", text: $nameTemplate)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(width: 140)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Divider().frame(height: 16)
+
+            // Overwrite policy
+            HStack(spacing: 4) {
+                Text("冲突：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $overwritePolicy) {
+                    Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
+                    Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
+                    Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
+                }
+                .pickerStyle(.menu)
+                .frame(width: 76)
+                .fixedSize()
+            }
+
+            Divider().frame(height: 16)
+
+            // Output format
+            HStack(spacing: 4) {
+                Text("格式：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $selectedOutputFormat) {
+                    ForEach(AudioSplitterOutputFormat.allCases) { fmt in
+                        Text(fmt.formatDescription).tag(fmt)
+                    }
+                }
+                .frame(width: 260)
+                .fixedSize()
+
+                if let caveat = selectedOutputFormat.caveat {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                        .help(caveat)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .fileImporter(
+            isPresented: $isShowingDirectoryPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                customOutputDirectory = url
+            }
+            isShowingDirectoryPicker = false
+        }
+    }
+}
+
 // MARK: - LoadedView
 struct LoadedView: View {
     let loaded: SplitterViewModel.LoadedFiles
@@ -299,220 +472,106 @@ struct LoadedView: View {
     @Binding var nameTemplate: String
     @Binding var overwritePolicy: AudioSplitter.OverwritePolicy
 
-    @State private var isShowingDirectoryPicker = false
-
-
-
+    // MARK: - body
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                Image(systemName: "music.note")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(loaded.albumTitle ?? "未知专辑")
-                        .font(.headline)
-                    Text(loaded.performer ?? "未知艺术家")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(loaded.audioURL.lastPathComponent)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Text("\(loaded.tracks.count) 曲目")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.secondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .padding(20)
-            .background(Color(nsColor: .controlBackgroundColor))
+            // ── ① Fixed header: album info ──────────────────────────
+            headerView
 
             Divider()
 
-            TrackListView(tracks: loaded.tracks)
-                .frame(maxHeight: .infinity)
+            // ── ② Scrollable content area ──────────────────────────
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Track list (height-capped so it cannot push the bottom bar out of view)
+                    TrackListView(tracks: loaded.tracks)
+                        .frame(maxHeight: 240)
+
+                    Divider()
+
+                    // Config bar
+                    LoadedConfigBar(
+                        selectedChapterSourceType: $selectedChapterSourceType,
+                        chapterSourceURL: $chapterSourceURL,
+                        customOutputDirectory: $customOutputDirectory,
+                        nameTemplate: $nameTemplate,
+                        overwritePolicy: $overwritePolicy,
+                        selectedOutputFormat: $selectedOutputFormat
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity)
 
             Divider()
 
-            HStack {
-                Text("分割依据：")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("", selection: $selectedChapterSourceType) {
-                    ForEach(ChapterSourceType.allCases) { type in
-                        Text(type.displayName).tag(type)
-                    }
-                }
-                .frame(width: 260)
-
-                // Show chosen file name for types that require a file
-                if selectedChapterSourceType.requiresFile {
-                    if let url = chapterSourceURL {
-                        Text(url.lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: 160)
-                    } else {
-                        Text("（未选择文件）")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
-
-                Spacer()
-
-                // Output directory picker
-                HStack(spacing: 6) {
-                    Text("目录：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let dir = customOutputDirectory {
-                        Text(dir.lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Text("（默认）")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("选择...") {
-                        isShowingDirectoryPicker = true
-                    }
-                    .font(.caption)
-                    .buttonStyle(.link)
-                    if customOutputDirectory != nil {
-                        Button("清除") {
-                            customOutputDirectory = nil
-                        }
-                        .font(.caption)
-                        .buttonStyle(.link)
-                    }
-                }
-
-                Divider().frame(height: 16)
-
-                // Filename template
-                HStack(spacing: 6) {
-                    Text("文件名：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("{index}. {title}", text: $nameTemplate)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(width: 160)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                Divider().frame(height: 16)
-
-                // Overwrite policy
-                HStack(spacing: 6) {
-                    Text("冲突：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $overwritePolicy) {
-                        Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
-                        Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
-                        Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 80)
-                }
-
-                Divider().frame(height: 16)
-
-                // Output format selector
-                HStack(spacing: 8) {
-                    Text("输出格式：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Picker("", selection: $selectedOutputFormat) {
-                        ForEach(AudioSplitterOutputFormat.allCases) { fmt in
-                            Text(fmt.formatDescription).tag(fmt)
-                        }
-                    }
-                    .frame(width: 320)
-
-                    if let caveat = selectedOutputFormat.caveat {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.orange)
-                            .font(.caption)
-                            .help(caveat)
-                    }
-                }
-
-                Button(action: onStart) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "scissors")
-                        Text("开始拆分")
-                    }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(20)
-            .background(Color(nsColor: .controlBackgroundColor))
+            // ── ③ Fixed bottom bar: primary action button ───────────
+            LoadedBottomBar(onStart: onStart)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: selectedChapterSourceType) { newValue in
-            if !newValue.requiresFile {
-                // Switching to auto or embedded — clear any previously picked file
-                chapterSourceURL = nil
-                return
-            }
-
-            // newValue requires a file — show NSOpenPanel
-            let panel = NSOpenPanel()
-            panel.allowsMultipleSelection = false
-            panel.canChooseDirectories = false
-
-            switch newValue {
-            case .cue:
-                panel.allowedContentTypes = [UTType(filenameExtension: "cue")!, UTType(filenameExtension: "qcue")!]
-                panel.message = "选择 CUE 文件"
-            case .textChapters:
-                panel.allowedContentTypes = [.text, .plainText]
-                panel.message = "选择文本章节文件"
-            case .ffmpegChapters:
-                panel.allowedContentTypes = [UTType(filenameExtension: "meta")!, UTType(filenameExtension: "ffmetadata")!]
-                panel.message = "选择 FFmpeg 章节文件"
-            default:
-                break
-            }
-
-            if panel.runModal() == .OK, let url = panel.url {
-                chapterSourceURL = url
-            } else {
-                // User cancelled the panel — revert picker to auto (no file selected)
-                selectedChapterSourceType = .auto
-                chapterSourceURL = nil
-            }
+            handleChapterSourceChange(newValue)
         }
-        .fileImporter(
-            isPresented: $isShowingDirectoryPicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                customOutputDirectory = url
+    }
+
+    // MARK: - headerView
+    private var headerView: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "music.note")
+                .font(.title2)
+                .foregroundColor(.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(loaded.albumTitle ?? "未知专辑")
+                    .font(.headline)
+                Text(loaded.performer ?? "未知艺术家")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(loaded.audioURL.lastPathComponent)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            isShowingDirectoryPicker = false
+
+            Spacer()
+
+            Text("\(loaded.tracks.count) 曲目")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.secondary.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .padding(20)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    // MARK: - handleChapterSourceChange
+    private func handleChapterSourceChange(_ newValue: ChapterSourceType) {
+        if !newValue.requiresFile {
+            chapterSourceURL = nil
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        switch newValue {
+        case .cue:
+            panel.allowedContentTypes = [UTType(filenameExtension: "cue")!, UTType(filenameExtension: "qcue")!]
+            panel.message = "选择 CUE 文件"
+        case .textChapters:
+            panel.allowedContentTypes = [.text, .plainText]
+            panel.message = "选择文本章节文件"
+        case .ffmpegChapters:
+            panel.allowedContentTypes = [UTType(filenameExtension: "meta")!, UTType(filenameExtension: "ffmetadata")!]
+            panel.message = "选择 FFmpeg 章节文件"
+        default:
+            break
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            chapterSourceURL = url
+        } else {
+            selectedChapterSourceType = .auto
+            chapterSourceURL = nil
         }
     }
 }
