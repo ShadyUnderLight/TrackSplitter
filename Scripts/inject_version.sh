@@ -1,5 +1,5 @@
 #!/bin/bash
-# inject_version.sh — Generates Library/Version.swift from Version.swift.in and
+# inject_version.sh — Generates Library/Version.swift from Scripts/Version.swift.in and
 # injects version into GUI/App/Info.plist.
 #
 # Run before building on all platforms (local dev, CI, release).
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-TEMPLATE="$REPO_ROOT/Library/Version.swift.in"
+TEMPLATE="$REPO_ROOT/Scripts/Version.swift.in"
 OUTPUT="$REPO_ROOT/Library/Version.swift"
 PLIST="$REPO_ROOT/GUI/App/Info.plist"
 
@@ -48,5 +48,5 @@ sed \
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST"
 
 echo "Version injected → semver=$SEMVER, build=$BUILD_NUM, sha=$SHA"
-echo "  • Library/Version.swift  (generated from Version.swift.in)"
+echo "  • Library/Version.swift  (generated from Scripts/Version.swift.in)"
 echo "  • GUI/App/Info.plist     CFBundleShortVersionString=$SEMVER CFBundleVersion=$BUILD_NUM"
