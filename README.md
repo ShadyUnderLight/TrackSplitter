@@ -202,4 +202,6 @@ TrackSplitter/
 - 各输出格式的元数据字段支持情况不同，详见 [docs/METADATA_MATRIX.md](docs/METADATA_MATRIX.md)
 
 ## 开源许可
-MIT
+
+- **代码与文档：** [MIT](LICENSE)
+- **运行时依赖：** [FFmpeg](https://ffmpeg.org/legal.html)（LGPL v2.1+，含可选 GPL 组件时为 GPL v2+）和 [mutagen](https://github.com/quodlibet/mutagen/blob/master/COPYING)（GPL v2+），详见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
