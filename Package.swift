@@ -20,7 +20,12 @@ let package = Package(
             name: "TrackSplitterLib",
             dependencies: [],
             path: "Library",
-            // embed_metadata.py is a resource, not a Swift source — include it explicitly.
+            // .swift.in template files are not compiled directly; they are processed
+            // at build time by a script (see Scripts/inject_version.sh). Exclude the
+            // template so SwiftPM stops flagging it as an "unhandled file".
+            exclude: ["Version.swift.in"],
+            // embed_metadata.py is needed at runtime; declared as a resource so it
+            // is included inside the built product.
             resources: [
                 .copy("Resources/embed_metadata.py")
             ]
