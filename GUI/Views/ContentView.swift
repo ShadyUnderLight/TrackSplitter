@@ -304,172 +304,157 @@ struct LoadedView: View {
 
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                Image(systemName: "music.note")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "music.note")
+                            .font(.title2)
+                            .foregroundColor(.accentColor)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(loaded.albumTitle ?? "未知专辑")
-                        .font(.headline)
-                    Text(loaded.performer ?? "未知艺术家")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(loaded.audioURL.lastPathComponent)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Text("\(loaded.tracks.count) 曲目")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.secondary.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .padding(20)
-            .background(Color(nsColor: .controlBackgroundColor))
-
-            Divider()
-
-            TrackListView(tracks: loaded.tracks)
-                .frame(maxHeight: 280)
-
-            Divider()
-
-            HStack {
-                Text("分割依据：")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("", selection: $selectedChapterSourceType) {
-                    ForEach(ChapterSourceType.allCases) { type in
-                        Text(type.displayName).tag(type)
-                    }
-                }
-                .frame(width: 260)
-
-                // Show chosen file name for types that require a file
-                if selectedChapterSourceType.requiresFile {
-                    if let url = chapterSourceURL {
-                        Text(url.lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: 160)
-                    } else {
-                        Text("（未选择文件）")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                }
-
-                Spacer()
-
-                // Output directory picker
-                HStack(spacing: 6) {
-                    Text("目录：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let dir = customOutputDirectory {
-                        Text(dir.lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Text("（默认）")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("选择...") {
-                        isShowingDirectoryPicker = true
-                    }
-                    .font(.caption)
-                    .buttonStyle(.link)
-                    if customOutputDirectory != nil {
-                        Button("清除") {
-                            customOutputDirectory = nil
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(loaded.albumTitle ?? "未知专辑")
+                                .font(.headline)
+                            Text(loaded.performer ?? "未知艺术家")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(loaded.audioURL.lastPathComponent)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .buttonStyle(.link)
+
+                        Spacer()
+
+                        Text("\(loaded.tracks.count) 曲目")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.secondary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                }
+                    .padding(20)
+                    .background(Color(nsColor: .controlBackgroundColor))
 
-                Divider().frame(height: 16)
+                    Divider()
 
-                // Filename template
-                HStack(spacing: 6) {
-                    Text("文件名：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("{index}. {title}", text: $nameTemplate)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(width: 160)
-                        .textFieldStyle(.roundedBorder)
-                }
+                    TrackListView(tracks: loaded.tracks)
+                        .frame(maxHeight: 220)
 
-                Divider().frame(height: 16)
+                    Divider()
 
-                // Overwrite policy
-                HStack(spacing: 6) {
-                    Text("冲突：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $overwritePolicy) {
-                        Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
-                        Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
-                        Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 80)
-                }
+                    HStack {
+                        Text("分割依据：")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
-                Divider().frame(height: 16)
+                        Picker("", selection: $selectedChapterSourceType) {
+                            ForEach(ChapterSourceType.allCases) { type in
+                                Text(type.displayName).tag(type)
+                            }
+                        }
+                        .frame(width: 260)
 
-                // Output format selector
-                HStack(spacing: 8) {
-                    Text("输出格式：")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        if selectedChapterSourceType.requiresFile {
+                            if let url = chapterSourceURL {
+                                Text(url.lastPathComponent)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: 160)
+                            } else {
+                                Text("（未选择文件）")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
 
-                    Picker("", selection: $selectedOutputFormat) {
-                        ForEach(AudioSplitterOutputFormat.allCases) { fmt in
-                            Text(fmt.formatDescription).tag(fmt)
+                        Spacer()
+
+                        HStack(spacing: 6) {
+                            Text("目录：")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let dir = customOutputDirectory {
+                                Text(dir.lastPathComponent)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            } else {
+                                Text("（默认）")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button("选择...") {
+                                isShowingDirectoryPicker = true
+                            }
+                            .font(.caption)
+                            .buttonStyle(.link)
+                            if customOutputDirectory != nil {
+                                Button("清除") {
+                                    customOutputDirectory = nil
+                                }
+                                .font(.caption)
+                                .buttonStyle(.link)
+                            }
+                        }
+
+                        Divider().frame(height: 16)
+
+                        HStack(spacing: 6) {
+                            Text("文件名：")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("{index}. {title}", text: $nameTemplate)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(width: 160)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        Divider().frame(height: 16)
+
+                        HStack(spacing: 6) {
+                            Text("冲突：")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Picker("", selection: $overwritePolicy) {
+                                Text("重命名").tag(AudioSplitter.OverwritePolicy.rename)
+                                Text("覆盖").tag(AudioSplitter.OverwritePolicy.overwrite)
+                                Text("跳过").tag(AudioSplitter.OverwritePolicy.skip)
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 80)
+                        }
+
+                        Divider().frame(height: 16)
+
+                        HStack(spacing: 8) {
+                            Text("输出格式：")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Picker("", selection: $selectedOutputFormat) {
+                                ForEach(AudioSplitterOutputFormat.allCases) { fmt in
+                                    Text(fmt.formatDescription).tag(fmt)
+                                }
+                            }
+                            .frame(width: 320)
+
+                            if let caveat = selectedOutputFormat.caveat {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                    .help(caveat)
+                            }
                         }
                     }
-                    .frame(width: 320)
-
-                    if let caveat = selectedOutputFormat.caveat {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.orange)
-                            .font(.caption)
-                            .help(caveat)
-                    }
+                    .padding(20)
+                    .background(Color(nsColor: .controlBackgroundColor))
                 }
-
-                Button(action: onStart) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "scissors")
-                        Text("开始拆分")
-                    }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
             }
-            .padding(20)
-            .background(Color(nsColor: .controlBackgroundColor))
-        }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadedBottomBar(onStart: onStart)
         }
         .onChange(of: selectedChapterSourceType) { newValue in
             if !newValue.requiresFile {
@@ -515,6 +500,33 @@ struct LoadedView: View {
             }
             isShowingDirectoryPicker = false
         }
+    }
+}
+
+// MARK: - LoadedBottomBar
+struct LoadedBottomBar: View {
+    let onStart: () -> Void
+    var body: some View {
+        HStack {
+            Spacer()
+            Button(action: onStart) {
+                HStack(spacing: 6) {
+                    Image(systemName: "scissors")
+                    Text("开始拆分")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 10)
+                .background(Color.accentColor)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 }
 
