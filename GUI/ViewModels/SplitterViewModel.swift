@@ -138,13 +138,14 @@ final class SplitterViewModel: ObservableObject {
 
     struct LoadedFiles: Equatable {
         let audioURL: URL
-        let cueURL: URL
+        let cueURL: URL?
+        let cueParseFailed: Bool
         let tracks: [CueTrack]
         let albumTitle: String?
         let performer: String?
 
         static func == (lhs: LoadedFiles, rhs: LoadedFiles) -> Bool {
-            lhs.audioURL == rhs.audioURL && lhs.cueURL == rhs.cueURL
+            lhs.audioURL == rhs.audioURL && lhs.cueURL == rhs.cueURL && lhs.cueParseFailed == rhs.cueParseFailed
         }
     }
 
@@ -288,37 +289,73 @@ else:
             return
         }
 
-        guard let cueURL = findCue(for: audioURL) else {
-            log("FAIL: CUE not found")
-            setError("未找到匹配的 CUE 文件（请确认 CUE 中 FILE 字段与音频文件名一致）")
-            return
+        if let cueURL = findCue(for: audioURL) {
+            do {
+                let (tracks, albumTitle, performer, _, _) = try parseCue(at: cueURL)
+                log("CUE parsed: \(tracks.count) tracks")
+                let previewTracks = fillPreviewEndTimes(for: tracks)
+                let loaded = LoadedFiles(
+                    audioURL: audioURL,
+                    cueURL: cueURL,
+                    cueParseFailed: false,
+                    tracks: previewTracks,
+                    albumTitle: albumTitle,
+                    performer: performer
+                )
+                phase = .loaded(loaded)
+                logs = []
+                progress = 0
+                log("DONE: phase = .loaded (with CUE)")
+                return
+            } catch {
+                log("WARN: CUE exists but parse failed: \(error), continuing without CUE")
+                let loaded = LoadedFiles(
+                    audioURL: audioURL,
+                    cueURL: cueURL,
+                    cueParseFailed: true,
+                    tracks: [],
+                    albumTitle: nil,
+                    performer: nil
+                )
+                phase = .loaded(loaded)
+                logs = []
+                progress = 0
+                log("DONE: phase = .loaded (CUE parse failed)")
+                return
+            }
+        } else {
+            log("INFO: No CUE found, loading without chapter data")
         }
 
-        do {
-            let (tracks, albumTitle, performer, _, _) = try parseCue(at: cueURL)
-            log("CUE parsed: \(tracks.count) tracks")
-            let previewTracks = fillPreviewEndTimes(for: tracks)
-            let loaded = LoadedFiles(
-                audioURL: audioURL,
-                cueURL: cueURL,
-                tracks: previewTracks,
-                albumTitle: albumTitle,
-                performer: performer
-            )
-            phase = .loaded(loaded)
-            logs = []
-            progress = 0
-            log("DONE: phase = .loaded")
-        } catch {
-            log("FAIL: parseCue threw: \(error)")
-            setError("解析 CUE 失败：\(error.localizedDescription)")
-        }
+        let loaded = LoadedFiles(
+            audioURL: audioURL,
+            cueURL: nil,
+            cueParseFailed: false,
+            tracks: [],
+            albumTitle: nil,
+            performer: nil
+        )
+        phase = .loaded(loaded)
+        logs = []
+        progress = 0
+        log("DONE: phase = .loaded (no CUE)")
     }
 
     func startProcessing() {
         guard case .loaded(let loaded) = phase else {
             setError("当前没有可处理的文件")
             return
+        }
+
+        if selectedChapterSourceType == .auto {
+            if loaded.cueURL == nil {
+                setError("自动检测 CUE 失败：未找到匹配的 CUE 文件（请确认 CUE 中 FILE 字段与音频文件名一致），或手动选择其他章节来源")
+                return
+            }
+            if loaded.cueParseFailed {
+                setError("自动检测 CUE 失败：CUE 文件存在但解析失败（请检查 CUE 格式是否正确，或手动选择其他章节来源）")
+                return
+            }
         }
 
         logs = []

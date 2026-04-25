@@ -301,7 +301,49 @@ struct LoadedView: View {
 
     @State private var isShowingDirectoryPicker = false
 
+    private var trackCountBadgeText: String {
+        if !loaded.tracks.isEmpty {
+            return "\(loaded.tracks.count) 曲目"
+        }
+        if loaded.cueParseFailed {
+            return "CUE 解析失败"
+        }
+        if loaded.cueURL != nil {
+            return "0 曲目"
+        }
+        switch selectedChapterSourceType {
+        case .auto:
+            return "未匹配到 CUE"
+        case .embedded:
+            return "嵌入章节"
+        case .cue, .textChapters, .ffmpegChapters:
+            return chapterSourceURL != nil ? "将读取章节" : "未选择文件"
+        }
+    }
 
+    private var trackListPlaceholderText: String {
+        if !loaded.tracks.isEmpty {
+            return ""
+        }
+        if loaded.cueParseFailed {
+            return "CUE 文件存在但解析失败，请检查 CUE 格式或选择其他章节来源"
+        }
+        if loaded.cueURL != nil {
+            return "无法解析 CUE 中的曲目"
+        }
+        switch selectedChapterSourceType {
+        case .auto:
+            return "请选择其他章节来源，或手动指定 CUE/章节文件"
+        case .embedded:
+            return "章节信息将在处理时从音频文件读取"
+        case .cue:
+            return chapterSourceURL != nil ? "将通过 CUE 文件读取章节" : "请选择 CUE 文件"
+        case .textChapters:
+            return chapterSourceURL != nil ? "将通过文本文件读取章节" : "请选择文本章节文件"
+        case .ffmpegChapters:
+            return chapterSourceURL != nil ? "将通过 FFmpeg 章节文件读取" : "请选择 FFmpeg 章节文件"
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -324,7 +366,7 @@ struct LoadedView: View {
 
                 Spacer()
 
-                Text("\(loaded.tracks.count) 曲目")
+                Text(trackCountBadgeText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
@@ -338,7 +380,14 @@ struct LoadedView: View {
             Divider()
 
             TrackListView(tracks: loaded.tracks)
-                .frame(maxHeight: 280)
+                .frame(maxHeight: loaded.tracks.isEmpty ? 100 : 280)
+                .overlay(alignment: .center) {
+                    if loaded.tracks.isEmpty {
+                        Text(trackListPlaceholderText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
             Divider()
 
