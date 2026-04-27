@@ -12,7 +12,7 @@
    - 读取音频文件**内嵌章节**（`--chapter-source embedded`）
    - 支持文本格式章节文件和 FFmpeg `CHAPTER*` 元数据文件（`--chapter-file <path>`）
 2. **灵活拆分**：使用 `ffmpeg` 逐轨拆分，可保持原始格式（passthrough），或通过 `--output-format` 转换为其他格式
-3. **自动封面抓取**（按优先级尝试）：文件内嵌封面 → MusicBrainz → iTunes → 本地目录图片 → LeftFM（默认关闭，可配置启用）
+3. **自动封面抓取**（按优先级尝试）：文件内嵌封面 → MusicBrainz → iTunes → 本地目录图片 → LeftFM（默认关闭）
 4. **元数据写入**：标题、艺人、专辑、年份、风格、轨号、总轨数、碟号（视输出格式而异，详见 [docs/METADATA_MATRIX.md](docs/METADATA_MATRIX.md)）
 
 ## 环境要求
@@ -129,15 +129,13 @@ TrackSplitter/
 │   ├── TrackSplitterEngine.swift  # 核心编排引擎
 │   ├── AudioSplitter.swift    # ffmpeg 多格式拆分调度
 │   ├── CueParser.swift        # CUE 解析器（支持 Big5/CP950/UTF-8）
-│   ├── ChapterSource.swift    # 章节来源枚举与解析
-│   ├── EmbeddedChapterReader.swift  # 内嵌章节读取（ffprobe）
-│   ├── TextChapterParser.swift # 纯文本与 FFmpeg 章节文件解析
-│   ├── AlbumArtFetcher.swift  # 封面抓取（本地目录/内嵌/MusicBrainz/iTunes/LeftFM）
+│   ├── ChapterSource.swift    # 章节来源枚举与解析（含文本/FFmpeg章节解析）
+│   ├── AlbumArtFetcher.swift  # 封面抓取（内嵌/MusicBrainz/iTunes/本地目录/LeftFM）
 │   ├── MetadataEmbedder.swift # Swift/mutagen 桥接层
 │   ├── ProcessRunner.swift    # ffmpeg/ffprobe 进程管理
 │   └── Resources/
 │       └── embed_metadata.py  # Python 元数据写入脚本（SwiftPM 资源）
-├── GUI/                       # macOS GUI 应用（Tauri + SwiftUI）
+├── GUI/                       # macOS GUI 应用（AppKit + SwiftUI + XcodeGen）
 │   ├── App/
 │   │   ├── main.swift
 │   │   ├── TrackSplitterApp.swift
@@ -187,10 +185,10 @@ TrackSplitter/
 
 ### 封面抓取顺序
 
-1. **本地目录图片**（始终优先，无网络请求，按文件大小选取最大 jpg/png）
-2. **文件内嵌封面**（直接从音频文件中读取）
-3. **MusicBrainz / Cover Art Archive**（可靠 API）
-4. **iTunes Search API**（可靠 API）
+1. **文件内嵌封面**（直接从音频文件中读取，无网络请求）
+2. **MusicBrainz / Cover Art Archive**（可靠 API）
+3. **iTunes Search API**（可靠 API）
+4. **本地目录图片**（无网络请求，按文件大小选取最大 jpg/png）
 5. **LeftFM**（默认关闭，需设置 `config.enableLeftFM = true`；通过 HTML 抓取，不可靠）
 
 ## 已知限制
@@ -204,4 +202,4 @@ TrackSplitter/
 ## 开源许可
 
 - **代码与文档：** [MIT](LICENSE)
-- **运行时依赖：** [FFmpeg](https://ffmpeg.org/legal.html)（LGPL v2.1+）和 [mutagen](https://github.com/quodlibet/mutagen/blob/master/COPYING)（MIT），详见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
+- **运行时依赖：** [FFmpeg](https://ffmpeg.org/legal.html)（LGPL v2.1+）和 [mutagen](https://github.com/quodlibet/mutagen/blob/master/COPYING)，详见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
