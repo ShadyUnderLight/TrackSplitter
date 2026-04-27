@@ -405,6 +405,7 @@ public actor TrackSplitterEngine {
             metadataResult = try await embedder.embedBatch(
                 files: zip(splitTracks, tracks).map { (url: $0.0, title: $0.1.title, trackNumber: $0.1.index) },
                 artist: performer ?? "Unknown Artist",
+                albumArtist: performer,
                 album: albumTitle ?? albumDisplayName,
                 year: cueRem.date ?? "",
                 genre: cueRem.genre ?? "",
