@@ -109,6 +109,7 @@ public protocol MetadataWriter: Sendable {
     func embedBatch(
         files: [(url: URL, title: String, trackNumber: Int)],
         artist: String,
+        albumArtist: String?,
         album: String,
         year: String,
         genre: String,
@@ -292,6 +293,7 @@ public actor PythonMetadataAdapter: MetadataWriter {
     public func embedBatch(
         files: [(url: URL, title: String, trackNumber: Int)],
         artist: String,
+        albumArtist: String?,
         album: String,
         year: String,
         genre: String,
@@ -308,12 +310,13 @@ public actor PythonMetadataAdapter: MetadataWriter {
             let comment: String?
             let composer: String?
             let discNumber: String?
+            let albumArtist: String?
         }
 
         let items = files.map { f in
             Item(path: f.url.path, title: f.title, artist: artist, album: album,
                  year: year, genre: genre, tracknum: String(f.trackNumber), total: String(totalTracks),
-                 comment: comment, composer: composer, discNumber: discNumber)
+                 comment: comment, composer: composer, discNumber: discNumber, albumArtist: albumArtist)
         }
 
         let coverB64: String? = coverData.map { Data($0).base64EncodedString() }
@@ -429,6 +432,7 @@ public actor MetadataEmbedder {
     public func embedBatch(
         files: [(url: URL, title: String, trackNumber: Int)],
         artist: String,
+        albumArtist: String?,
         album: String,
         year: String,
         genre: String,
@@ -438,14 +442,13 @@ public actor MetadataEmbedder {
         totalTracks: Int,
         coverData: Data?
     ) async throws -> EmbedResult {
-        // Pre-flight check — fail fast with a clear diagnosis
         let report = await checkEnvironment()
         if !report.isHealthy {
             throw EmbedError.environmentCheckFailed(report.issues)
         }
 
         return try await writer.embedBatch(
-            files: files, artist: artist, album: album, year: year, genre: genre,
+            files: files, artist: artist, albumArtist: albumArtist, album: album, year: year, genre: genre,
             comment: comment, composer: composer, discNumber: discNumber,
             totalTracks: totalTracks, coverData: coverData
         )

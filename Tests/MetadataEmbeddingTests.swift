@@ -6,8 +6,6 @@ import XCTest
 /// Uses Python's mutagen to read back written tags and verify correctness.
 ///
 /// These tests validate the actual field mapping described in docs/METADATA_MATRIX.md.
-/// Note: albumArtist is not yet plumbed through the Swift embedBatch API; that is
-/// tracked separately. These tests focus on fields that ARE currently supported.
 final class MetadataEmbeddingTests: XCTestCase {
 
     // MARK: - Helpers
@@ -49,6 +47,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         try await embedder.embedBatch(
             files: [(url: input, title: "Nightflight", trackNumber: 3)],
             artist: "David Bowie",
+            albumArtist: "David Bowie",
             album: "Heroes",
             year: "1977",
             genre: "Rock",
@@ -70,10 +69,10 @@ final class MetadataEmbeddingTests: XCTestCase {
         XCTAssertEqual(tags["totaltracks"], "14")
         XCTAssertEqual(tags["composer"], "Bowie")
         XCTAssertEqual(tags["discnumber"], "1")
+        XCTAssertEqual(tags["albumartist"], "David Bowie")
         // YEAR must NOT be written (DATE is the canonical year field in Vorbis)
         XCTAssertNil(tags["year"],
                      "YEAR must not be written — DATE is the canonical Vorbis year field")
-        // ALBUMARTIST requires Swift protocol change; not asserted here
     }
 
     func testEmbedFLAC_duplicateYearNotWritten() async throws {
@@ -85,6 +84,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         try await embedder.embedBatch(
             files: [(url: input, title: "Track", trackNumber: 1)],
             artist: "Artist",
+            albumArtist: nil,
             album: "Album",
             year: "1985",
             genre: "Pop",
@@ -111,6 +111,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         try await embedder.embedBatch(
             files: [(url: input, title: "Albatross", trackNumber: 2)],
             artist: "Fleetwood Mac",
+            albumArtist: "Fleetwood Mac",
             album: "Rumours",
             year: "1977",
             genre: "Rock",
@@ -128,10 +129,10 @@ final class MetadataEmbeddingTests: XCTestCase {
         XCTAssertEqual(tags["TDRC"], "1977")
         XCTAssertEqual(tags["TCON"], "Rock")
         XCTAssertEqual(tags["TRCK"], "2")
-        XCTAssertEqual(tags["TPOS"], "1")             // disc number via TPOS
-        XCTAssertEqual(tags["TCOM"], "Lindsey Buckingham") // composer
+        XCTAssertEqual(tags["TPOS"], "1")
+        XCTAssertEqual(tags["TCOM"], "Lindsey Buckingham")
         XCTAssertEqual(tags["COMM::eng"], "Classic")
-        // TPE2 (album artist) and TCOM (composer) require Swift protocol change
+        XCTAssertEqual(tags["TPE2"], "Fleetwood Mac")
     }
 
     func testEmbedMP3_discNumberWrittenAsTPOS() async throws {
@@ -143,6 +144,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         try await embedder.embedBatch(
             files: [(url: input, title: "Side-A", trackNumber: 1)],
             artist: "Artist",
+            albumArtist: nil,
             album: "Album",
             year: "2020",
             genre: "Jazz",
@@ -168,6 +170,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         try await embedder.embedBatch(
             files: [(url: input, title: "Overture", trackNumber: 1)],
             artist: "Test Artist",
+            albumArtist: "Album Artist Name",
             album: "Test Album",
             year: "2023",
             genre: "Classical",
@@ -183,6 +186,7 @@ final class MetadataEmbeddingTests: XCTestCase {
         let nam = "\u{00A9}nam"
         let art = "\u{00A9}ART"
         let alb = "\u{00A9}alb"
+        let aar = "\u{00A9}aAR"
         let day = "\u{00A9}day"
         let gen = "\u{00A9}gen"
         let wrt = "\u{00A9}wrt"
@@ -190,13 +194,13 @@ final class MetadataEmbeddingTests: XCTestCase {
         XCTAssertEqual(tags[nam], "Overture")
         XCTAssertEqual(tags[art], "Test Artist")
         XCTAssertEqual(tags[alb], "Test Album")
+        XCTAssertEqual(tags[aar], "Album Artist Name")
         XCTAssertEqual(tags[day], "2023")
         XCTAssertEqual(tags[gen], "Classical")
         XCTAssertEqual(tags[wrt], "Composer Name")
         XCTAssertEqual(tags[cmt], "Note")
         // trkn: (track, total) — encoded as list of (track, total) tuples
         XCTAssertEqual(tags["trkn"], "(1, 5)")
-        // album artist (©aART) and disc number require Swift protocol change
     }
 
     // MARK: - Environment check

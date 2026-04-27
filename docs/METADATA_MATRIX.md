@@ -14,6 +14,7 @@ Tested combinations are in `Tests/MetadataEmbeddingTests.swift`.
 | title | ✅ | ✅ | ✅ ©nam | ✅ | ✅ | ✅ | ✅ |
 | artist | ✅ | ✅ | ✅ ©ART | ✅ | ✅ | ✅ | ✅ |
 | album | ✅ | ✅ | ✅ ©alb | ✅ | ✅ | ✅ | ✅ |
+| album artist | ✅ ALBUMARTIST | ✅ TPE2 | ✅ ©aART | ❌ | ✅ | ✅ | ✅ |
 | year | ✅ DATE | ✅ TDRC | ✅ ©day | ✅ | ✅ | ✅ | ✅ |
 | genre | ✅ | ✅ TCON | ✅ ©gen | ✅ | ✅ | ✅ | ✅ |
 | track number | ✅ TRACKNUMBER | ✅ TRCK | ✅ trkn | ❌ | ❌ | ❌ | ❌ |
@@ -37,6 +38,7 @@ The Swift `embedBatch(…)` method in `MetadataEmbedder.swift` currently exposes
 ```
 files: [(url: URL, title: String, trackNumber: Int)]
 artist: String
+albumArtist: String?
 album: String
 year: String
 genre: String
@@ -51,7 +53,6 @@ The following fields are **implemented in Python** but **not yet reachable** thr
 
 | Field | Python support | Swift API reachable |
 |-------|--------------|-------------------|
-| album artist (`ALBUMARTIST` / `TPE2` / `©aART`) | ✅ | ❌ not plumbed |
 | TOTALTRACKS (MP3) | ❌ not representable in ID3v2 | n/a |
 
 ---
@@ -60,17 +61,18 @@ The following fields are **implemented in Python** but **not yet reachable** thr
 
 ### FLAC — mutagen Vorbis comments
 - `DATE` is the only year field written. `YEAR` is **not written** (confirmed by `testEmbedFLAC_duplicateYearNotWritten`).
-- `ALBUMARTIST` is present in the Python implementation but is never passed from Swift — the CUE parser does not distinguish track-level from album-level performer.
+- `ALBUMARTIST` is read from the JSON payload and written as a Vorbis comment.
+- The CUE parser stores the album-level PERFORMER in `performer`; `TrackSplitterEngine` passes it as both `artist` (performer for track) and `albumArtist` (via fallback: `performer`), consistent with the CUE model.
 
 ### MP3 — mutagen ID3v2
-- `TIT2 / TPE1 / TALB / TDRC / TCON / TRCK / TPOS / TCOM / COMM` via frame class instances (required by mutagen ≥ 1.47).
+- `TIT2 / TPE1 / TALB / TDRC / TCON / TRCK / TPOS / TCOM / COMM / TPE2` via frame class instances (required by mutagen ≥ 1.47).
 - `COMM` frame key serializes as `COMM::eng` (language suffix is part of the key).
 - TOTALTRACKS has no standard ID3v2 representation; only `TRCK` is written.
+- `TPE2` carries the album artist.
 
 ### M4A — mutagen iTunes atoms
-- `©nam / ©ART / ©alb / ©day / ©gen / ©wrt / ©cmt` as free-form text atoms.
+- `©nam / ©ART / ©alb / ©aAR / ©day / ©gen / ©wrt / ©cmt` as free-form text atoms.
 - `trkn` carries `(track, total)` as a tuple; mutagen serializes it as `(N, M)` string.
-- `©aART` (album artist) is present in Python but not passed from Swift.
 - **No disc number atom** exists in the iTunes tag schema.
 
 ### AIFF — mutagen ID3 chunk
@@ -105,6 +107,5 @@ The following fields are **implemented in Python** but **not yet reachable** thr
 
 - **MP3 TOTALTRACKS**: not representable in ID3v2. `TRCK` carries only the track number.
 - **M4A disc number**: no standard iTunes atom exists in the schema.
-- **Album artist**: implemented in Python (`ALBUMARTIST`/`TPE2`/`©aART`) but the Swift `embedBatch` API does not currently accept or forward this field from CUE data.
 - **WAV / AIFF / OGG / Opus**: cover art is not supported and is silently skipped.
 - **AIFF / OGG / Opus**: have explicit mutagen implementations but lack end-to-end test coverage.
