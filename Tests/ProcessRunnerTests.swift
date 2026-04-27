@@ -32,7 +32,6 @@ final class ProcessRunnerTests: XCTestCase {
     func testTimeoutThrowsTimeoutError() async throws {
         let runner = ProcessRunner(timeoutSeconds: 0.5)
         do {
-            // Sleep for 2 seconds — longer than the 0.5s timeout
             try await runner.run(executable: "/bin/sleep", arguments: ["2"])
             XCTFail("Expected timeout error")
         } catch let error as ProcessRunnerError {
@@ -41,6 +40,8 @@ final class ProcessRunnerTests: XCTestCase {
             } else {
                 XCTFail("Expected timeout error, got \(error)")
             }
+        } catch {
+            XCTFail("Expected timeout error, got \(error)")
         }
     }
 

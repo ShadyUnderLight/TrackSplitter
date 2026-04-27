@@ -319,7 +319,7 @@ struct TrackSplitterCLI {
       tracksplitter "/Users/music/album.flac" --chapter-file chapters.txt
       tracksplitter "/Users/music/album.wav" --output-format flac
       tracksplitter "album.flac" --output-dir ~/Desktop/tracks
-      tracksplitter "album.flac" --name-template "{index:02d} {title}.{ext}"
+      tracksplitter "album.flac" --name-template "{index} {title}.{ext}"
       tracksplitter "album.flac" --overwrite skip
 
     Requirements:
